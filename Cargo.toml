@@ -1,0 +1,47 @@
+[package]
+name = "aeonflux"
+version = "0.1.0"
+authors = ["isis lovecruft <isis@patternsinthevoid.net>"]
+edition = "2018"
+readme = "README.md"
+license = "BSD-3-Clause"
+categories = ["cryptography", "no-std"]
+keywords = ["MAC", "zero-knowledge", "anonymous", "credential", "algebraic-MAC"]
+description = "Composable, lightweight, fast attribute-based anonymous credentials with infinite (aeon) rerandomised (flux) presentations using algebraic message authentication codes (aMACs)"
+exclude = [
+    "**/.gitignore",
+    ".gitignore",
+    ".travis.yml",
+]
+autobenches = false
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[lib]
+name = "aeonflux"
+#crate-type = ["staticlib", "rlib", "cdylib"]
+
+# Heck yeah, XSS As A Service.
+[package.metadata.docs.rs]
+rustdoc-args = ["--html-in-header", ".cargo/registry/src/github.com-1ecc6299db9ec823/curve25519-dalek-0.13.2/rustdoc-include-katex-header.html"]
+features = ["nightly"]
+
+[dependencies]
+curve25519-dalek = { version = "2", default-features = false, features = ["serde"] }
+rand_core = { version = "0.5", default-features = false }
+serde = { version = "1" }
+subtle = { version = "1" }
+zeroize = { version = "1", default-features = false, features = ["zeroize_derive"] }
+zkp = { version = "0.7" }
+
+[dev-dependencies]
+rand = { version = "0.7" }
+
+[features]
+default = [ "std", "nightly", "u64_backend" ]
+std = [ "curve25519-dalek/std" ]
+nightly = [ "curve25519-dalek/nightly", "subtle/nightly" ]
+alloc = [ "curve25519-dalek/alloc" ]
+u32_backend = [ "curve25519-dalek/u32_backend" ]
+u64_backend = [ "curve25519-dalek/u64_backend" ]
+simd_backend = [ "curve25519-dalek/simd_backend" ]
