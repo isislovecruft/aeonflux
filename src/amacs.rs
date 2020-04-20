@@ -115,9 +115,15 @@ impl_serde_with_to_bytes_and_from_bytes!(SecretKey, "A valid byte sequence repre
 /// Attributes may be either group elements \(( M_i \in \mathbb{G} \)) or
 /// scalars \(( m_j \in \mathbb{Z}_q \)), written as \(( M_j = G_m_j * m_j \))
 /// where \(( G_m_j \)) is taken from the [`SystemParameters`].
+///
+/// When a `Credential` is shown, its attributes may be either revealed or
+/// hidden from the credential issuer.  These represent all the valid attribute
+/// types.
 pub enum Attribute {
-    Public(Scalar),
-    Secret(RistrettoPoint),
+    PublicScalar(Scalar),
+    SecretScalar(Scalar),
+    PublicPoint(RistrettoPoint),
+    SecretPoint(RistrettoPoint),
 }
 
 /// Messages are computed from `Attribute`s by scalar multiplying the scalar
@@ -134,8 +140,10 @@ impl Messages {
 
         for (i, attribute) in attributes.iter().enumerate() {
             let M_i: RistrettoPoint = match attribute {
-                Attribute::Public(m) => m * system_parameters.G_m[i],
-                Attribute::Secret(M) => *M,
+                Attribute::PublicScalar(m) => m * system_parameters.G_m[i],
+                Attribute::SecretScalar(m) => m * system_parameters.G_m[i],
+                Attribute::PublicPoint(M)  => *M,
+                Attribute::SecretPoint(M)  => *M,
             };
             messages.push(M_i);
         }
@@ -228,14 +236,14 @@ mod test {
         let sk = SecretKey::generate(&mut rng, &params);
         let mut messages = Vec::new();
 
-        messages.push(Attribute::Public(Scalar::random(&mut rng)));
-        messages.push(Attribute::Secret(RistrettoPoint::random(&mut rng)));
-        messages.push(Attribute::Public(Scalar::random(&mut rng)));
-        messages.push(Attribute::Secret(RistrettoPoint::random(&mut rng)));
-        messages.push(Attribute::Secret(RistrettoPoint::random(&mut rng)));
-        messages.push(Attribute::Secret(RistrettoPoint::random(&mut rng)));
-        messages.push(Attribute::Public(Scalar::random(&mut rng)));
-        messages.push(Attribute::Public(Scalar::random(&mut rng)));
+        messages.push(Attribute::PublicScalar(Scalar::random(&mut rng)));
+        messages.push(Attribute::SecretPoint(RistrettoPoint::random(&mut rng)));
+        messages.push(Attribute::PublicScalar(Scalar::random(&mut rng)));
+        messages.push(Attribute::SecretPoint(RistrettoPoint::random(&mut rng)));
+        messages.push(Attribute::SecretPoint(RistrettoPoint::random(&mut rng)));
+        messages.push(Attribute::SecretScalar(Scalar::random(&mut rng)));
+        messages.push(Attribute::PublicPoint(RistrettoPoint::random(&mut rng)));
+        messages.push(Attribute::PublicScalar(Scalar::random(&mut rng)));
 
         let amac = Amac::tag(&mut rng, &params, &sk, &messages).unwrap();
 
