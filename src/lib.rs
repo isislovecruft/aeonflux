@@ -32,7 +32,6 @@ extern crate serde;
 //extern crate sha2;
 extern crate subtle;
 extern crate zeroize;
-#[macro_use]
 extern crate zkp;
 
 // The macros have to come first.
@@ -44,7 +43,7 @@ pub mod credential;
 //pub mod elgamal;
 pub mod errors;
 //pub mod issuer;
-pub mod nipk;
+pub mod nizk;
 //pub mod nonces;
 pub mod parameters;
 //pub mod pedersen;

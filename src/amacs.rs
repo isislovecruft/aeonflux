@@ -25,6 +25,7 @@ use std::vec::Vec;
 use curve25519_dalek::ristretto::RistrettoPoint;
 use curve25519_dalek::scalar::Scalar;
 use curve25519_dalek::traits::Identity;
+use curve25519_dalek::traits::MultiscalarMul;
 
 use rand_core::CryptoRng;
 use rand_core::RngCore;
@@ -119,6 +120,29 @@ pub enum Attribute {
     Secret(RistrettoPoint),
 }
 
+/// Messages are computed from `Attribute`s by scalar multiplying the scalar
+/// portions by their respective generator in `SystemParameters.G_m`.
+pub struct Messages(pub(crate) Vec<RistrettoPoint>);
+
+impl Messages {
+    pub(crate) fn from_attributes(
+        attributes: &Vec<Attribute>,
+        system_parameters: &SystemParameters
+    ) -> Messages
+    {
+        let mut messages: Vec<RistrettoPoint> = Vec::with_capacity(attributes.len());
+
+        for (i, attribute) in attributes.iter().enumerate() {
+            let M_i: RistrettoPoint = match attribute {
+                Attribute::Public(m) => m * system_parameters.G_m[i],
+                Attribute::Secret(M) => *M,
+            };
+            messages.push(M_i);
+        }
+        Messages(messages)
+    }
+}
+
 /// An algebraic message authentication code, \(( (t,U,V) \in \mathbb{Z}_q \times \mathbb{G} \times \mathbb{G} \)).
 pub struct Amac {
     pub t: Scalar,
@@ -131,24 +155,18 @@ impl Amac {
     fn compute_V(
         system_parameters: &SystemParameters,
         secret_key: &SecretKey,
-        messages: &Vec<Attribute>,
+        attributes: &Vec<Attribute>,
         t: &Scalar,
         U: &RistrettoPoint,
     ) -> RistrettoPoint
     {
+        let messages: Messages = Messages::from_attributes(attributes, system_parameters);
+
         // V = W + (U (x_0 + x_1 t))
         let mut V: RistrettoPoint = secret_key.W + (U * (secret_key.x_0 + (secret_key.x_1 * t)));
 
         // V = W + (U (x_0 + x_1 t)) + \sigma{i=1}{n} M_i y_i
-        for (i, message) in messages.iter().enumerate() {
-            let M_i: RistrettoPoint = match message {
-                Attribute::Public(m) => m * system_parameters.G_m[i],
-                Attribute::Secret(M) => *M,
-            };
-
-            V += M_i * secret_key.y[i];
-        }
-
+        V += RistrettoPoint::multiscalar_mul(&secret_key.y[..], &messages.0[..]);
         V
     }
 
