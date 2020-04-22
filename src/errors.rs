@@ -9,6 +9,8 @@
 // - isis agora lovecruft <isis@patternsinthevoid.net>
 
 #[cfg(feature = "std")]
+use std::convert::From;
+#[cfg(feature = "std")]
 use std::fmt;
 #[cfg(feature = "std")]
 use std::fmt::Display;
@@ -19,11 +21,15 @@ use std::option::NoneError;
 use std::error::Error;
 
 #[cfg(not(feature = "std"))]
+use core::convert::From;
+#[cfg(not(feature = "std"))]
 use core::fmt;
 #[cfg(not(feature = "std"))]
 use core::fmt::Display;
 #[cfg(not(feature = "std"))]
 use core::option::NoneError;
+
+use zkp::ProofError;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
 pub enum MacError {
@@ -139,3 +145,9 @@ impl From<MacError> for CredentialError {
 
 #[cfg(feature = "std")]
 impl Error for CredentialError { }
+
+impl From<ProofError> for CredentialError {
+    fn from(_source: ProofError) -> CredentialError {
+        CredentialError::VerificationFailure
+    }
+}

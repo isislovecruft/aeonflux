@@ -25,16 +25,15 @@ use zkp::CompactProof;
 use zkp::Transcript;
 // XXX do we want/need batch proof verification?
 // use zkp::toolbox::batch_verifier::BatchVerifier;
-use zkp::toolbox::prover::PointVar;
 use zkp::toolbox::prover::Prover;
-use zkp::toolbox::prover::ScalarVar;
-// use zkp::toolbox::verifier::Verifier;
+use zkp::toolbox::verifier::Verifier;
 use zkp::toolbox::SchnorrCS;
 
 use crate::amacs::Attribute;
 use crate::amacs::Messages;
 use crate::amacs::SecretKey;
 use crate::credential::Credential;
+use crate::errors::CredentialError;
 use crate::parameters::{IssuerParameters, SystemParameters};
 
 pub struct ProofOfIssuance(CompactProof);
@@ -51,6 +50,9 @@ impl ProofOfIssuance {
         credential: &Credential,
     ) -> ProofOfIssuance
     {
+        use zkp::toolbox::prover::PointVar;
+        use zkp::toolbox::prover::ScalarVar;
+
         let mut transcript = Transcript::new(b"2019/1416 anonymous credential");
         let mut prover = Prover::new(b"2019/1416 issuance proof", &mut transcript);
 
@@ -136,6 +138,99 @@ impl ProofOfIssuance {
 
         ProofOfIssuance(prover.prove_compact())
     }
+
+    /// Verify a [`ProofOfIssuance`].
+    pub fn verify(
+        &self,
+        system_parameters: &SystemParameters,
+        issuer_parameters: &IssuerParameters,
+        credential: &Credential,
+    ) -> Result<(), CredentialError>
+    {
+        use zkp::toolbox::verifier::PointVar;
+        use zkp::toolbox::verifier::ScalarVar;
+
+        let mut transcript = Transcript::new(b"2019/1416 anonymous credential");
+        let mut verifier = Verifier::new(b"2019/1416 issuance proof", &mut transcript);
+
+        // Commit the names of the Camenisch-Stadler secrets to the protocol transcript.
+        let w       = verifier.allocate_scalar(b"w");
+        let w_prime = verifier.allocate_scalar(b"w'");
+        let x_0     = verifier.allocate_scalar(b"x_0");
+        let x_1     = verifier.allocate_scalar(b"x_1");
+
+        let mut y: Vec<ScalarVar> = Vec::with_capacity(system_parameters.NUMBER_OF_ATTRIBUTES as usize);
+
+        for i in 0..system_parameters.NUMBER_OF_ATTRIBUTES as usize {
+            // XXX fix the zkp crate to take Strings
+            //y.push(verifier.allocate_scalar(format!("y_{}", i)));
+            y.push(verifier.allocate_scalar(b"y"));
+        }
+
+        let one = verifier.allocate_scalar(b"1");
+        let t   = verifier.allocate_scalar(b"t");
+
+        // Commit to the values and names of the Camenisch-Stadler publics.
+        let neg_G_V   = verifier.allocate_point(b"-G_V",    (-system_parameters.G_V).compress())?;
+        let G         = verifier.allocate_point(b"G",         system_parameters.G.compress())?;
+        let G_w       = verifier.allocate_point(b"G_w",       system_parameters.G_w.compress())?;
+        let G_w_prime = verifier.allocate_point(b"G_w_prime", system_parameters.G_w_prime.compress())?;
+        let G_x_0     = verifier.allocate_point(b"G_x_0",     system_parameters.G_x_0.compress())?;
+        let G_x_1     = verifier.allocate_point(b"G_x_1",     system_parameters.G_x_1.compress())?;
+
+        let mut G_y: Vec<PointVar> = Vec::with_capacity(system_parameters.NUMBER_OF_ATTRIBUTES as usize);
+
+        for (i, G_y_i) in system_parameters.G_y.iter().enumerate() {
+            // XXX fix the zkp crate to take Strings
+            //G_y.push(verifier.allocate_point(format!("G_y_{}", i), G_y_i)?);
+            G_y.push(verifier.allocate_point(b"G_y", G_y_i.compress())?);
+        }
+        let C_W = verifier.allocate_point(b"C_W", issuer_parameters.C_W.compress())?;
+        let I   = verifier.allocate_point(b"I",   issuer_parameters.I.compress())?;
+        let U   = verifier.allocate_point(b"U", credential.amac.U.compress())?;
+        let V   = verifier.allocate_point(b"V", credential.amac.V.compress())?;
+
+        let mut M: Vec<PointVar> = Vec::with_capacity(system_parameters.NUMBER_OF_ATTRIBUTES as usize);
+
+        let messages: Messages = Messages::from_attributes(&credential.attributes, system_parameters);
+
+        for (i, M_i) in messages.0.iter().enumerate() {
+            // XXX fix the zkp crate to take Strings
+            //let (M_x, _) = verifier.allocate_point(format!("M_{}", i), M_i);
+            let M_x = verifier.allocate_point(b"M", M_i.compress())?;
+
+            M.push(M_x);
+        }
+
+        // Constraint #1: C_W = G_w * w + G_w' * w'
+        verifier.constrain(C_W, vec![(w, G_w), (w_prime, G_w_prime)]);
+
+        // Constraint #2: I = -G_V + G_x_0 * x_0 + G_x_1 * x_1 + G_y_1 * y_1 + ... + G_y_n * y_n
+        let mut rhs: Vec<(ScalarVar, PointVar)> = Vec::with_capacity(3 + system_parameters.NUMBER_OF_ATTRIBUTES as usize);
+
+        rhs.push((one, neg_G_V));
+        rhs.push((x_0, G_x_0));
+        rhs.push((x_1, G_x_1));
+        rhs.extend(y.iter().copied().zip(G_y.iter().copied()));
+
+        verifier.constrain(I, rhs);
+
+        // Constraint #3: V = G * w + U * x_0 + U * x_1 + U * t + \sigma{i=1}{n} M_i * y_i
+        let mut rhs: Vec<(ScalarVar, PointVar)> = Vec::with_capacity(4 + system_parameters.NUMBER_OF_ATTRIBUTES as usize);
+
+        rhs.push((w, G));
+        rhs.push((x_0, U));
+        rhs.push((x_1, U));
+        rhs.push((t, U));
+        rhs.extend(y.iter().copied().zip(M.iter().copied()));
+
+        verifier.constrain(V, rhs);
+
+        match verifier.verify_compact(&self.0) {
+            Ok(()) => Ok(()),
+            Err(_) => Err(CredentialError::VerificationFailure),
+        }
+    }
 }
 
 /// A proof-of-knowledge of a valid `Credential` and its attributes,
@@ -160,6 +255,9 @@ impl ProofOfValidCredential {
     where
         C: RngCore + CryptoRng,
     {
+        use zkp::toolbox::prover::PointVar;
+        use zkp::toolbox::prover::ScalarVar;
+
         // Choose a nonce for the commitments.
         let z_:   Scalar = Scalar::random(csprng);
         let z_0_: Scalar = (-credential.amac.t * z_).reduce();
