@@ -24,12 +24,11 @@ extern crate std;
 extern crate alloc;
 
 extern crate curve25519_dalek;
-//extern crate merlin;
 #[cfg(test)]
 extern crate rand;
 extern crate rand_core;
 extern crate serde;
-//extern crate sha2;
+extern crate sha2;
 extern crate subtle;
 extern crate zeroize;
 extern crate zkp;
@@ -40,7 +39,6 @@ pub mod macros;
 
 pub mod amacs;
 pub mod credential;
-//pub mod elgamal;
 pub mod errors;
 //pub mod issuer;
 pub mod nizk;
@@ -48,5 +46,5 @@ pub mod nizk;
 pub mod parameters;
 //pub mod pedersen;
 pub mod prelude;
-//pub mod proofs;
+pub mod symmetric;
 //pub mod user;

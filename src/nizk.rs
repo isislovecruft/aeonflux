@@ -262,10 +262,11 @@ impl ProofOfValidCredential {
         let z_:   Scalar = Scalar::random(csprng);
         let z_0_: Scalar = (-credential.amac.t * z_).reduce();
 
-        // Commit to the credential attributes.
+        // Commit to the credential attributes, store the revealed attributes in
+        // M_i and the hidden scalar attributes in H_s.
         let mut C_y_i_: Vec<RistrettoPoint> = Vec::with_capacity(system_parameters.NUMBER_OF_ATTRIBUTES as usize);
         let mut M_i_:   Vec<RistrettoPoint> = Vec::with_capacity(system_parameters.NUMBER_OF_ATTRIBUTES as usize);
-        let mut m_i_: Vec<(usize, RistrettoPoint, Scalar)> = Vec::new();
+        let mut H_s_: Vec<(usize, RistrettoPoint, Scalar)> = Vec::new();
 
         for (i, attribute) in credential.attributes.iter().enumerate() {
             let M_i: RistrettoPoint = match attribute {
@@ -273,12 +274,11 @@ impl ProofOfValidCredential {
                 Attribute::SecretPoint(M)  => *M,
                 Attribute::PublicScalar(_) => RistrettoPoint::identity(),
                 Attribute::SecretScalar(m) => {
-                    m_i_.push((i, system_parameters.G_m[i], *m));
+                    H_s_.push((i, system_parameters.G_m[i], *m));
                     system_parameters.G_m[i] * m
                 },
             };
 
-            M_i_.push(M_i);
             C_y_i_.push((system_parameters.G_y[i] * z_) + M_i);
         }
         let C_x_0_: RistrettoPoint = (system_parameters.G_x_0 * z_) +  credential.amac.U;
@@ -296,12 +296,12 @@ impl ProofOfValidCredential {
         let z_0 = prover.allocate_scalar(b"z_0", z_0_);
         let t = prover.allocate_scalar(b"t", credential.amac.t);
 
-        let mut m_i: Vec<ScalarVar> = Vec::with_capacity(m_i_.len());
+        let mut H_s: Vec<ScalarVar> = Vec::with_capacity(H_s_.len());
 
-        for (i, basepoint, scalar) in m_i_.iter() {
+        for (i, basepoint, scalar) in H_s_.iter() {
             // XXX Fix zkp crate to take Strings
-            //m_i.push(prover.allocate_scalar(format!(b"m_{}", i), scalar));
-            m_i.push(prover.allocate_scalar(b"m", *scalar));
+            //H_s.push(prover.allocate_scalar(format!(b"H_s_{}", i), scalar));
+            H_s.push(prover.allocate_scalar(b"m", *scalar));
         }
 
         // Feed in the domain separators and values for the publics into the transcript.
@@ -363,5 +363,21 @@ impl ProofOfValidCredential {
             C_y: C_y_i_,
             Z: Z_,
         }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    use rand::thread_rng;
+
+    #[test]
+    fn issuance_proof() {
+        let mut rng = thread_rng();
+        let system_params = SystemParameters::generate(&mut rng, 2).unwrap();
+        let sk = SecretKey::generate(&mut rng, &params);
+        let issuer_params = IssuerParameters::generate(&system_parameters, &sk);
+
     }
 }

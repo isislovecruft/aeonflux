@@ -31,7 +31,7 @@ use crate::errors::CredentialError;
 /// Given the `number_of_attributes`, calculate the size of a serialised
 /// [`SystemParameters`], in bytes.
 pub(crate) fn sizeof_system_parameters(number_of_attributes: u8) -> usize {
-    32 * (5 + (2 * number_of_attributes as usize) + 1) + 1
+    32 * (5 + (2 * number_of_attributes as usize) + 4) + 1
 }
 
 /// The `SystemParameters` define the system-wide context in which the anonymous
@@ -49,6 +49,10 @@ pub(crate) fn sizeof_system_parameters(number_of_attributes: u8) -> usize {
 /// * `\\( \log_G(G*) \\)` is unknown, that is, all generators `G*` are chosen
 ///   as a distinguished basepoint which is orthogonal to `g`.
 /// * `n` is the [`NUMBER_OF_ATTRIBUTES`] in the message space.
+///
+/// Additionally, for the [`symmetric`]-key verifiable encryption scheme, we
+/// require three more generators chosen orthogonally,
+/// \\( (G_a, G_a0, G_a1) \in \mathbb{G} \\), chosen as detailed above.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct SystemParameters {
     pub NUMBER_OF_ATTRIBUTES: u8,
@@ -60,6 +64,9 @@ pub struct SystemParameters {
     pub G_y:       Vec<RistrettoPoint>,
     pub G_m:       Vec<RistrettoPoint>,
     pub G_V:       RistrettoPoint,
+    pub G_a:       RistrettoPoint,
+    pub G_a0:      RistrettoPoint,
+    pub G_a1:      RistrettoPoint,
 }
 
 macro_rules! try_deserialise {
@@ -115,10 +122,19 @@ impl SystemParameters {
             G_m.push(try_deserialise!(format!("G_m_{}", i), chunk));
         }
 
-        chunk.copy_from_slice(&bytes[index..index+32]);
+        chunk.copy_from_slice(&bytes[index..index+32]); index += 32;
         let G_V: RistrettoPoint = try_deserialise!("G_V", chunk);
 
-        Ok(SystemParameters { NUMBER_OF_ATTRIBUTES, G, G_w, G_w_prime, G_x_0, G_x_1, G_y, G_m, G_V })
+        chunk.copy_from_slice(&bytes[index..index+32]); index += 32;
+        let G_a: RistrettoPoint = try_deserialise!("G_a", chunk);
+
+        chunk.copy_from_slice(&bytes[index..index+32]); index += 32;
+        let G_a0: RistrettoPoint = try_deserialise!("G_a0", chunk);
+
+        chunk.copy_from_slice(&bytes[index..index+32]);
+        let G_a1: RistrettoPoint = try_deserialise!("G_a1", chunk);
+
+        Ok(SystemParameters { NUMBER_OF_ATTRIBUTES, G, G_w, G_w_prime, G_x_0, G_x_1, G_y, G_m, G_V, G_a, G_a0, G_a1 })
     }
 
     pub fn to_bytes(&self) -> Vec<u8> {
@@ -141,7 +157,9 @@ impl SystemParameters {
         }
 
         v.extend(self.G_V.compress().to_bytes().iter());
-
+        v.extend(self.G_a.compress().to_bytes().iter());
+        v.extend(self.G_a0.compress().to_bytes().iter());
+        v.extend(self.G_a1.compress().to_bytes().iter());
         v
     }
 }
@@ -170,6 +188,9 @@ impl SystemParameters {
         let mut G_y: Vec<RistrettoPoint> = Vec::with_capacity(number_of_attributes as usize);
         let mut G_m: Vec<RistrettoPoint> = Vec::with_capacity(number_of_attributes as usize);
         let mut G_V: Option<RistrettoPoint> = None;
+        let mut G_a: Option<RistrettoPoint> = None;
+        let mut G_a0: Option<RistrettoPoint> = None;
+        let mut G_a1: Option<RistrettoPoint> = None;
 
         while G_w.is_none() {
             csprng.fill_bytes(&mut tmp);
@@ -216,6 +237,21 @@ impl SystemParameters {
             G_V = CompressedRistretto(tmp).decompress();
         }
 
+        while G_a.is_none() {
+            csprng.fill_bytes(&mut tmp);
+            G_a = CompressedRistretto(tmp).decompress();
+        }
+
+        while G_a0.is_none() {
+            csprng.fill_bytes(&mut tmp);
+            G_a0 = CompressedRistretto(tmp).decompress();
+        }
+
+        while G_a1.is_none() {
+            csprng.fill_bytes(&mut tmp);
+            G_a1 = CompressedRistretto(tmp).decompress();
+        }
+
         let NUMBER_OF_ATTRIBUTES = number_of_attributes;
         let G = RISTRETTO_BASEPOINT_POINT;
         let G_w = G_w.unwrap();
@@ -223,6 +259,9 @@ impl SystemParameters {
         let G_x_0 = G_x_0.unwrap();
         let G_x_1 = G_x_1.unwrap();
         let G_V = G_V.unwrap();
+        let G_a = G_a.unwrap();
+        let G_a0 = G_a0.unwrap();
+        let G_a1 = G_a1.unwrap();
 
         // Safety check: all generators should be generators (i.e. not the
         // identity element) and be unique.  While the chances of this happening
@@ -236,6 +275,9 @@ impl SystemParameters {
         generators.push(G_x_0.compress());
         generators.push(G_x_1.compress());
         generators.push(G_V.compress());
+        generators.push(G_a.compress());
+        generators.push(G_a0.compress());
+        generators.push(G_a1.compress());
 
         for i in 0..NUMBER_OF_ATTRIBUTES as usize {
             generators.push(G_y[i].compress());
@@ -252,7 +294,7 @@ impl SystemParameters {
             }
         }
 
-        Ok(SystemParameters { NUMBER_OF_ATTRIBUTES, G, G_w, G_w_prime, G_x_0, G_x_1, G_y, G_m, G_V })
+        Ok(SystemParameters { NUMBER_OF_ATTRIBUTES, G, G_w, G_w_prime, G_x_0, G_x_1, G_y, G_m, G_V, G_a, G_a0, G_a1 })
     }
 
     /// Generate new system parameters using the
