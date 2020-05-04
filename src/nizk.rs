@@ -32,7 +32,7 @@ use zkp::toolbox::SchnorrCS;
 use crate::amacs::Attribute;
 use crate::amacs::Messages;
 use crate::amacs::SecretKey;
-use crate::credential::Credential;
+use crate::credential::AnonymousCredential;
 use crate::errors::CredentialError;
 use crate::parameters::{IssuerParameters, SystemParameters};
 
@@ -47,7 +47,7 @@ impl ProofOfIssuance {
         secret_key: &SecretKey,
         system_parameters: &SystemParameters,
         issuer_parameters: &IssuerParameters,
-        credential: &Credential,
+        credential: &AnonymousCredential,
     ) -> ProofOfIssuance
     {
         use zkp::toolbox::prover::PointVar;
@@ -144,7 +144,7 @@ impl ProofOfIssuance {
         &self,
         system_parameters: &SystemParameters,
         issuer_parameters: &IssuerParameters,
-        credential: &Credential,
+        credential: &AnonymousCredential,
     ) -> Result<(), CredentialError>
     {
         use zkp::toolbox::verifier::PointVar;
@@ -249,7 +249,7 @@ impl ProofOfValidCredential {
     pub fn prove<C>(
         system_parameters: &SystemParameters,
         issuer_parameters: &IssuerParameters,
-        credential: &Credential,
+        credential: &AnonymousCredential,
         csprng: &mut C,
     ) -> ProofOfValidCredential
     where
@@ -376,8 +376,8 @@ mod test {
     fn issuance_proof() {
         let mut rng = thread_rng();
         let system_params = SystemParameters::generate(&mut rng, 2).unwrap();
-        let sk = SecretKey::generate(&mut rng, &params);
-        let issuer_params = IssuerParameters::generate(&system_parameters, &sk);
+        let sk = SecretKey::generate(&mut rng, &system_params);
+        let issuer_params = IssuerParameters::generate(&system_params, &sk);
 
     }
 }

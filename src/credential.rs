@@ -17,7 +17,17 @@ use std::vec::Vec;
 use crate::amacs::Amac;
 use crate::amacs::Attribute;
 
-pub struct Credential {
+pub struct AnonymousCredential {
     pub(crate) amac: Amac,
     pub(crate) attributes: Vec<Attribute>,
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn credential_issuance() {
+
+    }
 }

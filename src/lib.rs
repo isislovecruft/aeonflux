@@ -39,8 +39,9 @@ pub mod macros;
 
 pub mod amacs;
 pub mod credential;
+pub mod encoding;
 pub mod errors;
-//pub mod issuer;
+pub mod issuer;
 pub mod nizk;
 //pub mod nonces;
 pub mod parameters;

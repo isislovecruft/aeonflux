@@ -126,6 +126,8 @@ pub enum Attribute {
     SecretPoint(RistrettoPoint),
 }
 
+// XXX impl Drop for Attribute?
+
 /// Messages are computed from `Attribute`s by scalar multiplying the scalar
 /// portions by their respective generator in `SystemParameters.G_m`.
 pub struct Messages(pub(crate) Vec<RistrettoPoint>);
