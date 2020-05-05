@@ -82,9 +82,10 @@ pub enum CredentialError {
     NoSystemParameters,
     PointDecompressionError,
     ScalarFormatError,
+    UndecryptableAttribute,
+    VerificationFailure,
     WrongNumberOfAttributes,
     WrongNumberOfBytes,
-    VerificationFailure,
 }
 
 impl fmt::Display for CredentialError {
@@ -110,12 +111,14 @@ impl fmt::Display for CredentialError {
                 => write!(f, "Cannot decompress Ristretto point"),
             CredentialError::ScalarFormatError
                 => write!(f, "Cannot use scalar with high-bit set"),
+            CredentialError::UndecryptableAttribute
+                => write!(f, "A hidden group attribute could not be decrypted"),
+            CredentialError::VerificationFailure
+                => write!(f, "The proof could not be verified"),
             CredentialError::WrongNumberOfAttributes
                 => write!(f, "The credential did not have the correct number of attributes"),
             CredentialError::WrongNumberOfBytes
                 => write!(f, "The credential could not be deserialised because it was not a multiple of 32 bytes"),
-            CredentialError::VerificationFailure
-                => write!(f, "The proof could not be verified"),
         }
     }
 }

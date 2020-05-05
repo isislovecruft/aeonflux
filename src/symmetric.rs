@@ -30,6 +30,9 @@ use rand_core::RngCore;
 
 use sha2::Sha512;
 
+use crate::encoding::decode_from_group;
+use crate::encoding::encode_to_group;
+use crate::errors::CredentialError;
 use crate::parameters::SystemParameters;
 
 /// A secret key, used for hidden group element attributes during credential
@@ -42,9 +45,7 @@ pub(crate) struct SecretKey {
 
 /// A public key, used for verification of a symmetrica encryption.
 pub(crate) struct PublicKey {
-    A: RistrettoPoint,
-    A0: RistrettoPoint,
-    A1: RistrettoPoint,
+    pk: RistrettoPoint,
 }
 
 /// A keypair for encryption of hidden group element attributes.
@@ -77,13 +78,14 @@ impl Keypair {
         let a0: Scalar = Scalar::hash_from_bytes::<Sha512>(a.as_bytes());
         let a1: Scalar = Scalar::hash_from_bytes::<Sha512>(a0.as_bytes());
 
-        let A: RistrettoPoint = system_parameters.G_a * a;
-        let A0: RistrettoPoint = system_parameters.G_a0 * a0;
-        let A1: RistrettoPoint = system_parameters.G_a1 * a1;
+        let pk: RistrettoPoint =
+            (system_parameters.G_a  * a) +
+            (system_parameters.G_a0 * a0) +
+            (system_parameters.G_a1 * a1);
 
         Keypair {
             secret: SecretKey { a, a0, a1 },
-            public: PublicKey { A, A0, A1 },
+            public: PublicKey { pk },
         }
     }
 
@@ -114,30 +116,64 @@ impl Keypair {
     }
 
     /// DOCDOC
+    // TODO return the counter
     pub fn encrypt(
+        &self,
         message: &[u8],
-    ) -> Ciphertext
+    ) -> (Ciphertext, RistrettoPoint, RistrettoPoint, Scalar)
     {
         // We let M1 = EncodeToG(m), M2 = HashToG(m), and m3 = HashToZZq(m).
-        let M1: RistrettoPoint = encode_to_group(&message);
-        let M2: RistrettoPoint = RistrettoPoint::hash_from_bytes(&message);
+        let (M1, _) = encode_to_group(&message);
+        let M2: RistrettoPoint = RistrettoPoint::hash_from_bytes::<Sha512>(&message);
         let m3: Scalar = Scalar::hash_from_bytes::<Sha512>(&message);
 
         let E1: RistrettoPoint = M2 * (self.secret.a0 + self.secret.a1 * m3);
         let E2: RistrettoPoint = E1 * self.secret.a + M1;
 
-        Ciphertext { E1, E2 }
+        (Ciphertext { E1, E2 }, M1, M2, m3)
     }
 
+    /// DOCDOC
     pub fn decrypt(
+        &self,
         ciphertext: &Ciphertext,
-    ) -> RistrettoPoint
+    ) -> Result<[u8; 30], CredentialError>
     {
-        unimplemented!()
+        let (m_prime, _) = decode_from_group(&(ciphertext.E2 - (ciphertext.E1 * self.secret.a)));
+        let m3_prime = Scalar::hash_from_bytes::<Sha512>(&m_prime);
+
+        let M1_prime = RistrettoPoint::hash_from_bytes::<Sha512>(&m_prime);
+        let E1_prime = M1_prime * (self.secret.a0 + self.secret.a1 * m3_prime);
+
+        match ciphertext.E1 == E1_prime {
+            true => Ok(m_prime),
+            false => Err(CredentialError::UndecryptableAttribute),
+        }
     }
 }
 
+/// DOCDOC
 pub struct Ciphertext {
     E1: RistrettoPoint,
     E2: RistrettoPoint,
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    use rand::thread_rng;
+
+    #[test]
+    fn encrypt_decrypt_roundtrip() {
+        let mut csprng = thread_rng();
+        let system_parameters = SystemParameters::hash_and_pray(&mut csprng, 2).unwrap();
+        let (keypair, master_secret) = Keypair::generate(&system_parameters, &mut csprng);
+        let message = [0u8; 30];
+        let ciphertext = keypair.encrypt(&message);
+        let plaintext = keypair.decrypt(&ciphertext);
+
+        assert!(plaintext.is_ok());
+        assert_eq!(message, plaintext.unwrap());
+    }
 }
