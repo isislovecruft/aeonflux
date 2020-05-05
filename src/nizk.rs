@@ -35,6 +35,9 @@ use crate::amacs::SecretKey;
 use crate::credential::AnonymousCredential;
 use crate::errors::CredentialError;
 use crate::parameters::{IssuerParameters, SystemParameters};
+use crate::symmetric::Ciphertext;
+use crate::symmetric::Keypair as SymmetricKeypair;
+use crate::symmetric::PublicKey as SymmetricPublicKey;
 
 pub struct ProofOfIssuance(CompactProof);
 
@@ -230,6 +233,112 @@ impl ProofOfIssuance {
             Ok(()) => Ok(()),
             Err(_) => Err(CredentialError::VerificationFailure),
         }
+    }
+}
+
+/// A proof-of-knowledge that a ciphertext encrypts a plaintext
+/// committed to in a list of commitments.
+pub struct ProofOfEncryption {
+    proof: CompactProof,
+    public_key: SymmetricPublicKey,
+    C_y_1: RistrettoPoint,
+    C_y_2: RistrettoPoint,
+    C_y_3: RistrettoPoint,
+    C_y_2_prime: RistrettoPoint,
+}
+
+impl ProofOfEncryption {
+    /// DOCDOC
+    ///
+    /// # Inputs
+    ///
+    /// * z must be reused from the outer-lying [`ProofOfValidCredential`].
+    pub fn prove<C>(
+        system_parameters: &SystemParameters,
+        plaintext: &[u8; 30],
+        keypair: &SymmetricKeypair,
+        z: &Scalar,
+    ) -> (Ciphertext, ProofOfEncryption)
+    where
+        C: RngCore + CryptoRng,
+    {
+        use zkp::toolbox::prover::PointVar;
+        use zkp::toolbox::prover::ScalarVar;
+
+        // Encrypt the plaintext.
+        let (ciphertext_, M1_, M2_, m3_) = keypair.encrypt(&plaintext[..]);
+
+        // Compute the vector C of commitments to the plaintext.
+        let C_y_1_ = M1_                              + (system_parameters.G_y[0] * z);
+        let C_y_2_ = M2_                              + (system_parameters.G_y[1] * z);
+        let C_y_3_ = (system_parameters.G_m[2] * m3_) + (system_parameters.G_y[2] * z);
+
+        // Compute C_y_2' = C_y_2 * a1.
+        let C_y_2_prime_ = C_y_2_ * keypair.secret.a1;
+
+        // Calculate z1 = -z(a0 + a1 * m3).
+        let z1_ = -z * (keypair.secret.a0 + keypair.secret.a1 * m3_);
+
+        // Construct a protocol transcript and prover.
+        let mut transcript = Transcript::new(b"2019/1416 anonymous credentials");
+        let mut prover = Prover::new(b"2019/1416 proof of encryption", &mut transcript);
+
+        // Commit the names of the Camenisch-Stadler secrets to the protocol transcript.
+        let a  = prover.allocate_scalar(b"a",  keypair.secret.a);
+        let a0 = prover.allocate_scalar(b"a0", keypair.secret.a0);
+        let a1 = prover.allocate_scalar(b"a1", keypair.secret.a1);
+        let m3 = prover.allocate_scalar(b"m3", m3_);
+        let z  = prover.allocate_scalar(b"z",  *z);
+        let z1 = prover.allocate_scalar(b"z1", z1_);
+
+        // Commit to the values and names of the Camenisch-Stadler publics.
+        let (pk, _)             = prover.allocate_point(b"pk",       keypair.public.pk);
+        let (G_a, _)            = prover.allocate_point(b"G_a",      system_parameters.G_a);
+        let (G_a_0, _)          = prover.allocate_point(b"G_a_0",    system_parameters.G_a0);
+        let (G_a_1, _)          = prover.allocate_point(b"G_a_1",    system_parameters.G_a1);
+        let (G_y_1, _)          = prover.allocate_point(b"G_y_1",    system_parameters.G_y[0]);
+        let (G_y_2, _)          = prover.allocate_point(b"G_y_2",    system_parameters.G_y[1]);
+        let (G_y_3, _)          = prover.allocate_point(b"G_y_3",    system_parameters.G_y[2]);
+        let (G_m_3, _)          = prover.allocate_point(b"G_m_3",    system_parameters.G_m[2]);
+        let (C_y_2, _)          = prover.allocate_point(b"C_y_2",    C_y_2_);
+        let (C_y_3, _)          = prover.allocate_point(b"C_y_3",    C_y_3_);
+        let (C_y_2_prime, _)    = prover.allocate_point(b"C_y_2'",   C_y_2_prime_);
+        let (C_y_1_minus_E2, _) = prover.allocate_point(b"C_y_1-E2", C_y_1_ - ciphertext_.E2);
+        let (E1, _)             = prover.allocate_point(b"E1",       ciphertext_.E1);
+        let (minus_E1, _)       = prover.allocate_point(b"-E1",      -ciphertext_.E1);
+
+        // Constraint #1: Prove knowledge of the secret portions of the symmetric key.
+        //                pk = G_a * a + G_a0 * a0 + G_a1 * a1
+        prover.constrain(pk, vec![(a, G_a), (a0, G_a_0), (a1, G_a_1)]);
+
+        // Constraint #2: The plaintext of this encryption is the message.
+        //                C_y_1 - E2 = G_y_1 * z - E_1 * a
+        prover.constrain(C_y_1_minus_E2, vec![(z, G_y_1), (a, minus_E1)]);
+
+        // Constraint #3: The encryption C_y_2' of the commitment C_y_2 is formed correctly w.r.t. the secret key.
+        //                C_y_2' = C_y_2 * a1
+        prover.constrain(C_y_2_prime, vec![(a1, C_y_2)]);
+
+        // Constraint #4: The encryption E1 is well formed.
+        //                  E1 = C_y_2            * a0 + C_y_2'                * m3    + G_y_2 * z1
+        // M2 * (a0 + a1 * m3) = (M2 + G_y_2 * z) * a0 + (M2 + G_y_2 * z) * a1 * m3    + G_y_2 * -z (a0 + a1 * m3)
+        // M2(a0) + M2(a1)(m3) = M2(a0) + G_y_2(z)(a0) + M2(a1)(m3) + G_y_2(z)(a1)(m3) + G_y_2(-z)(a0) + G_y_2(-z)(a1)(m3)
+        // M2(a0) + M2(a1)(m3) = M2(a0)                + M2(a1)(m3)
+        prover.constrain(E1, vec![(a0, C_y_2), (m3, C_y_2_prime), (z1, G_y_2)]);
+
+        // Constraint #5: The commitment to the hash m3 is a correct hash of the message commited to.
+        prover.constrain(C_y_3, vec![(z, G_y_3), (m3, G_m_3)]);
+
+        let proof = prover.prove_compact();
+
+        (ciphertext_, ProofOfEncryption {
+            proof: proof,
+            public_key: keypair.public,
+            C_y_1: C_y_1_,
+            C_y_2: C_y_2_,
+            C_y_3: C_y_3_,
+            C_y_2_prime: C_y_2_prime_,
+        })
     }
 }
 

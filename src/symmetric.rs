@@ -37,18 +37,23 @@ use crate::parameters::SystemParameters;
 
 /// A secret key, used for hidden group element attributes during credential
 /// presentation.
+#[derive(Clone)]
 pub(crate) struct SecretKey {
-    a: Scalar,
-    a0: Scalar,
-    a1: Scalar,
+    pub(crate) a: Scalar,
+    pub(crate) a0: Scalar,
+    pub(crate) a1: Scalar,
 }
 
+// XXX impl Drop for SecretKey
+
 /// A public key, used for verification of a symmetrica encryption.
+#[derive(Clone, Copy)]
 pub(crate) struct PublicKey {
-    pk: RistrettoPoint,
+    pub pk: RistrettoPoint,
 }
 
 /// A keypair for encryption of hidden group element attributes.
+#[derive(Clone)]
 pub struct Keypair {
     pub(crate) secret: SecretKey,
     pub(crate) public: PublicKey,
@@ -57,6 +62,8 @@ pub struct Keypair {
 /// A master secret, which can be used with the [`Keypair::derive`] method to
 /// produce a [`Keypair`].
 pub type MasterSecret = [u8; 64];
+
+// XXX impl Drop for MasterSecret
 
 impl Keypair {
     /// Derive this [`Keypair`] from a master secret.
@@ -116,7 +123,6 @@ impl Keypair {
     }
 
     /// DOCDOC
-    // TODO return the counter
     pub fn encrypt(
         &self,
         message: &[u8],
@@ -134,6 +140,7 @@ impl Keypair {
     }
 
     /// DOCDOC
+    // TODO return the counter
     pub fn decrypt(
         &self,
         ciphertext: &Ciphertext,
@@ -154,8 +161,8 @@ impl Keypair {
 
 /// DOCDOC
 pub struct Ciphertext {
-    E1: RistrettoPoint,
-    E2: RistrettoPoint,
+    pub E1: RistrettoPoint,
+    pub E2: RistrettoPoint,
 }
 
 #[cfg(test)]
@@ -170,7 +177,7 @@ mod test {
         let system_parameters = SystemParameters::hash_and_pray(&mut csprng, 2).unwrap();
         let (keypair, master_secret) = Keypair::generate(&system_parameters, &mut csprng);
         let message = [0u8; 30];
-        let ciphertext = keypair.encrypt(&message);
+        let (ciphertext, _, _, _) = keypair.encrypt(&message);
         let plaintext = keypair.decrypt(&ciphertext);
 
         assert!(plaintext.is_ok());
