@@ -344,6 +344,18 @@ impl ProofOfEncryption {
         })
     }
 
+    /// Verify that this [`ProofOfEncryption`] proves that a `ciphertext` is a
+    /// correct encryption of a verifiably-encrypted plaintext.
+    ///
+    /// # Inputs
+    ///
+    /// * The [`SystemParameters`] for this anonymous credential instantiation,
+    /// * The [`Ciphertext`] in question,
+    /// * The "public key" for the symmetric verifiable encryption scheme.
+    ///
+    /// # Returns
+    ///
+    /// A `Result` whose `Ok` value is empty, otherwise a [`CredentialError`].
     pub fn verify(
         &self,
         system_parameters: &SystemParameters,
