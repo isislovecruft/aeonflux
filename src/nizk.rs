@@ -245,11 +245,19 @@ pub struct ProofOfEncryption {
 }
 
 impl ProofOfEncryption {
-    /// DOCDOC
+    /// Prove in zero-knowledge that a ciphertext is a verifiable encryption of
+    /// a plaintext w.r.t. a valid commitment to a secret symmetric key.
     ///
     /// # Inputs
     ///
-    /// * z must be reused from the outer-lying [`ProofOfValidCredential`].
+    /// * The [`SystemParameters`] for this anonymous credential instantiation,
+    /// * A `plaintext` of up to thirty bytes.
+    /// * A symmetric "keypair",
+    /// * The nonce, `z`, must be reused from the outer-lying [`ProofOfValidCredential`].
+    ///
+    /// # Returns
+    ///
+    /// A `Result` whose `Ok` value is empty, otherwise a [`CredentialError`].
     pub fn prove<C>(
         system_parameters: &SystemParameters,
         plaintext: &[u8; 30],
