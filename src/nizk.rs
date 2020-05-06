@@ -229,10 +229,7 @@ impl ProofOfIssuance {
 
         verifier.constrain(V, rhs);
 
-        match verifier.verify_compact(&self.0) {
-            Ok(()) => Ok(()),
-            Err(_) => Err(CredentialError::VerificationFailure),
-        }
+        verifier.verify_compact(&self.0).or_else(|_| Err(CredentialError::VerificationFailure))
     }
 }
 
