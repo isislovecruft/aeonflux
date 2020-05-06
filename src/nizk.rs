@@ -345,6 +345,66 @@ impl ProofOfEncryption {
             C_y_2_prime: C_y_2_prime_,
         })
     }
+
+    pub fn verify(
+        &self,
+        system_parameters: &SystemParameters,
+        ciphertext: &Ciphertext,
+        public_key: &SymmetricPublicKey,
+    ) -> Result<(), CredentialError>
+    {
+        // Construct a protocol transcript and verifier.
+        let mut transcript = Transcript::new(b"2019/1416 anonymous credentials");
+        let mut verifier = Verifier::new(b"2019/1416 proof of encryption", &mut transcript);
+
+        // Commit the names of the Camenisch-Stadler secrets to the protocol transcript.
+        let a  = verifier.allocate_scalar(b"a");
+        let a0 = verifier.allocate_scalar(b"a0");
+        let a1 = verifier.allocate_scalar(b"a1");
+        let m3 = verifier.allocate_scalar(b"m3");
+        let z  = verifier.allocate_scalar(b"z");
+        let z1 = verifier.allocate_scalar(b"z1");
+
+        // Commit to the values and names of the Camenisch-Stadler publics.
+        let pk             = verifier.allocate_point(b"pk",       public_key.pk.compress())?;
+        let G_a            = verifier.allocate_point(b"G_a",      system_parameters.G_a.compress())?;
+        let G_a_0          = verifier.allocate_point(b"G_a_0",    system_parameters.G_a0.compress())?;
+        let G_a_1          = verifier.allocate_point(b"G_a_1",    system_parameters.G_a1.compress())?;
+        let G_y_1          = verifier.allocate_point(b"G_y_1",    system_parameters.G_y[0].compress())?;
+        let G_y_2          = verifier.allocate_point(b"G_y_2",    system_parameters.G_y[1].compress())?;
+        let G_y_3          = verifier.allocate_point(b"G_y_3",    system_parameters.G_y[2].compress())?;
+        let G_m_3          = verifier.allocate_point(b"G_m_3",    system_parameters.G_m[2].compress())?;
+        let C_y_2          = verifier.allocate_point(b"C_y_2",    self.C_y_2.compress())?;
+        let C_y_3          = verifier.allocate_point(b"C_y_3",    self.C_y_3.compress())?;
+        let C_y_2_prime    = verifier.allocate_point(b"C_y_2'",   self.C_y_2_prime.compress())?;
+        let C_y_1_minus_E2 = verifier.allocate_point(b"C_y_1-E2", (self.C_y_1 - ciphertext.E2).compress())?;
+        let E1             = verifier.allocate_point(b"E1",       ciphertext.E1.compress())?;
+        let minus_E1       = verifier.allocate_point(b"-E1",      (-ciphertext.E1).compress())?;
+
+        // Constraint #1: Prove knowledge of the secret portions of the symmetric key.
+        //                pk = G_a * a + G_a0 * a0 + G_a1 * a1
+        verifier.constrain(pk, vec![(a, G_a), (a0, G_a_0), (a1, G_a_1)]);
+
+        // Constraint #2: The plaintext of this encryption is the message.
+        //                C_y_1 - E2 = G_y_1 * z - E_1 * a
+        verifier.constrain(C_y_1_minus_E2, vec![(z, G_y_1), (a, minus_E1)]);
+
+        // Constraint #3: The encryption C_y_2' of the commitment C_y_2 is formed correctly w.r.t. the secret key.
+        //                C_y_2' = C_y_2 * a1
+        verifier.constrain(C_y_2_prime, vec![(a1, C_y_2)]);
+
+        // Constraint #4: The encryption E1 is well formed.
+        //                  E1 = C_y_2            * a0 + C_y_2'                * m3    + G_y_2 * z1
+        // M2 * (a0 + a1 * m3) = (M2 + G_y_2 * z) * a0 + (M2 + G_y_2 * z) * a1 * m3    + G_y_2 * -z (a0 + a1 * m3)
+        // M2(a0) + M2(a1)(m3) = M2(a0) + G_y_2(z)(a0) + M2(a1)(m3) + G_y_2(z)(a1)(m3) + G_y_2(-z)(a0) + G_y_2(-z)(a1)(m3)
+        // M2(a0) + M2(a1)(m3) = M2(a0)                + M2(a1)(m3)
+        verifier.constrain(E1, vec![(a0, C_y_2), (m3, C_y_2_prime), (z1, G_y_2)]);
+
+        // Constraint #5: The commitment to the hash m3 is a correct hash of the message commited to.
+        verifier.constrain(C_y_3, vec![(z, G_y_3), (m3, G_m_3)]);
+
+        verifier.verify_compact(&self.proof).or_else(|_| Err(CredentialError::VerificationFailure))
+    }
 }
 
 /// A proof-of-knowledge of a valid `Credential` and its attributes,

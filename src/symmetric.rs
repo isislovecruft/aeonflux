@@ -48,7 +48,7 @@ pub(crate) struct SecretKey {
 
 /// A public key, used for verification of a symmetrica encryption.
 #[derive(Clone, Copy)]
-pub(crate) struct PublicKey {
+pub struct PublicKey {
     pub pk: RistrettoPoint,
 }
 
@@ -56,7 +56,7 @@ pub(crate) struct PublicKey {
 #[derive(Clone)]
 pub struct Keypair {
     pub(crate) secret: SecretKey,
-    pub(crate) public: PublicKey,
+    pub public: PublicKey,
 }
 
 /// A master secret, which can be used with the [`Keypair::derive`] method to
