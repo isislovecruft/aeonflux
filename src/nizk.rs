@@ -258,14 +258,12 @@ impl ProofOfEncryption {
     /// # Returns
     ///
     /// A `Result` whose `Ok` value is empty, otherwise a [`CredentialError`].
-    pub fn prove<C>(
+    pub fn prove(
         system_parameters: &SystemParameters,
         plaintext: &[u8; 30],
         keypair: &SymmetricKeypair,
         z: &Scalar,
     ) -> (Ciphertext, ProofOfEncryption)
-    where
-        C: RngCore + CryptoRng,
     {
         use zkp::toolbox::prover::PointVar;
         use zkp::toolbox::prover::ScalarVar;
