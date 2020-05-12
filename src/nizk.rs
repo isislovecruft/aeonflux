@@ -41,9 +41,9 @@ use crate::symmetric::PublicKey as SymmetricPublicKey;
 
 pub struct ProofOfIssuance(CompactProof);
 
-/// A non-interactive zero-knowledge proof demonstating knowledge of the
-/// issuer's secret key, and that a [`Credential`] was computed correctly
-/// w.r.t. the pubilshed system and issuer parameters.
+/// A non-interactive zero-knowledge proof demonstrating knowledge of the
+/// issuer's secret key, and that an [`AnonymousCredential`] was computed
+/// correctly w.r.t. the pubilshed system and issuer parameters.
 impl ProofOfIssuance {
     /// Create a [`ProofOfIssuance`].
     pub fn prove(
@@ -128,10 +128,10 @@ impl ProofOfIssuance {
 
         prover.constrain(I, rhs);
 
-        // Constraint #3: V = G * w + U * x_0 + U * x_1 + U * t + \sigma{i=1}{n} M_i * y_i
+        // Constraint #3: V = G_w * w + U * x_0 + U * x_1 + U * t + \sigma{i=1}{n} M_i * y_i
         let mut rhs: Vec<(ScalarVar, PointVar)> = Vec::with_capacity(4 + system_parameters.NUMBER_OF_ATTRIBUTES as usize);
 
-        rhs.push((w, G));
+        rhs.push((w, G_w));
         rhs.push((x_0, U));
         rhs.push((x_1, U));
         rhs.push((t, U));
@@ -188,6 +188,7 @@ impl ProofOfIssuance {
             //G_y.push(verifier.allocate_point(format!("G_y_{}", i), G_y_i)?);
             G_y.push(verifier.allocate_point(b"G_y", G_y_i.compress())?);
         }
+
         let C_W = verifier.allocate_point(b"C_W", issuer_parameters.C_W.compress())?;
         let I   = verifier.allocate_point(b"I",   issuer_parameters.I.compress())?;
         let U   = verifier.allocate_point(b"U", credential.amac.U.compress())?;
@@ -218,10 +219,10 @@ impl ProofOfIssuance {
 
         verifier.constrain(I, rhs);
 
-        // Constraint #3: V = G * w + U * x_0 + U * x_1 + U * t + \sigma{i=1}{n} M_i * y_i
+        // Constraint #3: V = G_w * w + U * x_0 + U * x_1 + U * t + \sigma{i=1}{n} M_i * y_i
         let mut rhs: Vec<(ScalarVar, PointVar)> = Vec::with_capacity(4 + system_parameters.NUMBER_OF_ATTRIBUTES as usize);
 
-        rhs.push((w, G));
+        rhs.push((w, G_w));
         rhs.push((x_0, U));
         rhs.push((x_1, U));
         rhs.push((t, U));
@@ -425,7 +426,6 @@ pub struct ProofOfValidCredential {
     C_x_1: RistrettoPoint,
     C_V:   RistrettoPoint,
     C_y: Vec<RistrettoPoint>,
-    Z:     RistrettoPoint,
 }
 
 impl ProofOfValidCredential {
@@ -462,7 +462,6 @@ impl ProofOfValidCredential {
                     system_parameters.G_m[i] * m
                 },
             };
-
             C_y_i_.push((system_parameters.G_y[i] * z_) + M_i);
         }
         let C_x_0_: RistrettoPoint = (system_parameters.G_x_0 * z_) +  credential.amac.U;
@@ -522,17 +521,20 @@ impl ProofOfValidCredential {
             M.push(M_i);
         }
 
-        // Constraint #1: Z = I * z
+        // Constraint #1: Prove knowledge of the nonce, z, and the correctness of the AMAC with Z.
+        //                Z = I * z
         prover.constrain(Z, vec![(z, I)]);
 
-        // Constraint #2: C_x_1 = C_x_0 * t          + G_x_0 * z_0 + G_x_1 * z
+        // Constraint #2: Prove correctness of t and U.
+        //                C_x_1 = C_x_0 * t          + G_x_0 * z_0 + G_x_1 * z
         //    G_x_1 * z + U * t = G_x_0 * zt + U * t + G_x_0 * -tz + G_x_1 * z
         //    G_x_1 * z + U * t =              U * t +               G_x_1 * z
         prover.constrain(C_x_1, vec![(t, C_x_0), (z_0, G_x_0), (z, G_x_1)]);
 
-        //                        { G_y_i * z + M_i                  if i is a hidden group attribute
-        // Constraint #3: C_y_i = { G_y_i * z + G_m_i * m_i          if i is a hidden scalar attribute
-        //                        { G_y_i * z                        if i is a revealed attribute
+        // Constraint #3: Prove correctness/validation of attributes.
+        //                { G_y_i * z + M_i                  if i is a hidden group attribute
+        //        C_y_i = { G_y_i * z + G_m_i * m_i          if i is a hidden scalar attribute
+        //                { G_y_i * z                        if i is a revealed attribute
         for (i, C_y_i) in C_y.iter().enumerate() {
             prover.constrain(*C_y_i, vec![(z, G_y[i]), (one, M[i])]);
         }
@@ -545,7 +547,6 @@ impl ProofOfValidCredential {
             C_x_1: C_x_1_,
             C_V: C_V_,
             C_y: C_y_i_,
-            Z: Z_,
         }
     }
 }
@@ -554,14 +555,29 @@ impl ProofOfValidCredential {
 mod test {
     use super::*;
 
+    use crate::issuer::Issuer;
+
     use rand::thread_rng;
 
     #[test]
     fn issuance_proof() {
         let mut rng = thread_rng();
-        let system_params = SystemParameters::generate(&mut rng, 2).unwrap();
-        let sk = SecretKey::generate(&mut rng, &system_params);
-        let issuer_params = IssuerParameters::generate(&system_params, &sk);
+        let system_parameters = SystemParameters::generate(&mut rng, 5).unwrap();
+        let amacs_key = SecretKey::generate(&mut rng, &system_parameters);
+        let issuer_parameters = IssuerParameters::generate(&system_parameters, &amacs_key);
+        let issuer = Issuer::new(&system_parameters, &issuer_parameters, &amacs_key);
 
+        let mut attributes = Vec::new();
+        attributes.push(Attribute::SecretScalar(Scalar::random(&mut rng)));
+        attributes.push(Attribute::PublicScalar(Scalar::random(&mut rng)));
+        attributes.push(Attribute::PublicPoint(RistrettoPoint::random(&mut rng)));
+        attributes.push(Attribute::SecretPoint(RistrettoPoint::random(&mut rng)));
+        attributes.push(Attribute::SecretScalar(Scalar::random(&mut rng)));
+
+        let credential = issuer.issue(attributes, &mut rng).unwrap();
+        let proof = ProofOfIssuance::prove(&amacs_key, &system_parameters, &issuer_parameters, &credential);
+        let verification = proof.verify(&system_parameters, &issuer_parameters, &credential);
+
+        assert!(verification.is_ok());
     }
 }

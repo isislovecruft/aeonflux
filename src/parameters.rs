@@ -17,6 +17,7 @@ use curve25519_dalek::constants::RISTRETTO_BASEPOINT_COMPRESSED;
 use curve25519_dalek::constants::RISTRETTO_BASEPOINT_POINT;
 use curve25519_dalek::ristretto::CompressedRistretto;
 use curve25519_dalek::ristretto::RistrettoPoint;
+use curve25519_dalek::scalar::Scalar;
 use curve25519_dalek::traits::Identity;
 
 use serde::{self, Serialize, Deserialize, Serializer, Deserializer};
@@ -309,6 +310,7 @@ impl SystemParameters {
 }
 
 /// DOCDOC
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct IssuerParameters {
     pub C_W: RistrettoPoint,
     pub I: RistrettoPoint,
@@ -321,9 +323,9 @@ impl IssuerParameters {
         let C_W: RistrettoPoint = (system_parameters.G_w * secret_key.w) +
                                   (system_parameters.G_w_prime * secret_key.w_prime);
 
-        let mut I: RistrettoPoint = system_parameters.G_V -
-                                   (system_parameters.G_x_0 * secret_key.x_0) +
-                                   (system_parameters.G_x_1 * secret_key.x_1);
+        let mut I: RistrettoPoint = (-system_parameters.G_V * Scalar::one()) +
+                                    (system_parameters.G_x_0 * secret_key.x_0) +
+                                    (system_parameters.G_x_1 * secret_key.x_1);
 
         for i in 0..system_parameters.NUMBER_OF_ATTRIBUTES as usize {
             I += system_parameters.G_y[i] * secret_key.y[i];
