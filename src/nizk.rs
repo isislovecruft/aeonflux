@@ -580,4 +580,22 @@ mod test {
 
         assert!(verification.is_ok());
     }
+
+    #[test]
+    fn encryption_proof() {
+        let mut rng = thread_rng();
+        let system_parameters = SystemParameters::generate(&mut rng, 5).unwrap();
+        let (keypair, _) = SymmetricKeypair::generate(&system_parameters, &mut rng);
+        let z = Scalar::random(&mut rng);
+        let plaintext: &[u8; 30] = b"This is a tsunami alert test..";
+
+        let (ciphertext, proof) = ProofOfEncryption::prove(&system_parameters, &plaintext, &keypair, &z);
+        let decryption = keypair.decrypt(&ciphertext).unwrap();
+
+        assert!(&decryption == plaintext);
+
+        let verification = proof.verify(&system_parameters, &ciphertext, &keypair.public);
+
+        assert!(verification.is_ok());
+    }
 }
