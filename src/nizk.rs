@@ -549,6 +549,16 @@ impl ProofOfValidCredential {
             C_y: C_y_i_,
         }
     }
+
+    pub fn verify(
+        &self,
+        system_parameters: &SystemParameters,
+        issuer_parameters: &IssuerParameters,
+        credential: &AnonymousCredential,
+    ) -> Result<(), CredentialError>
+    {
+        Err(CredentialError::VerificationFailure)
+    }
 }
 
 #[cfg(test)]
@@ -595,6 +605,31 @@ mod test {
         assert!(&decryption == plaintext);
 
         let verification = proof.verify(&system_parameters, &ciphertext, &keypair.public);
+
+        assert!(verification.is_ok());
+    }
+
+    #[test]
+    fn credential_proof() {
+        let mut rng = thread_rng();
+        let system_parameters = SystemParameters::generate(&mut rng, 8).unwrap();
+        let amacs_key = SecretKey::generate(&mut rng, &system_parameters);
+        let issuer_parameters = IssuerParameters::generate(&system_parameters, &amacs_key);
+        let issuer = Issuer::new(&system_parameters, &issuer_parameters, &amacs_key);
+
+        let mut attributes = Vec::new();
+        attributes.push(Attribute::SecretPoint(RistrettoPoint::random(&mut rng)));
+        attributes.push(Attribute::SecretScalar(Scalar::random(&mut rng)));
+        attributes.push(Attribute::SecretScalar(Scalar::random(&mut rng)));
+        attributes.push(Attribute::PublicScalar(Scalar::random(&mut rng)));
+        attributes.push(Attribute::PublicPoint(RistrettoPoint::random(&mut rng)));
+        attributes.push(Attribute::SecretScalar(Scalar::random(&mut rng)));
+        attributes.push(Attribute::PublicScalar(Scalar::random(&mut rng)));
+        attributes.push(Attribute::PublicPoint(RistrettoPoint::random(&mut rng)));
+
+        let credential = issuer.issue(attributes, &mut rng).unwrap();
+        let proof = ProofOfValidCredential::prove(&system_parameters, &issuer_parameters, &credential, &mut rng);
+        let verification = proof.verify(&system_parameters, &issuer_parameters, &credential);
 
         assert!(verification.is_ok());
     }
