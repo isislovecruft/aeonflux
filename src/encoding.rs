@@ -52,6 +52,7 @@ use curve25519_dalek::ristretto::RistrettoPoint;
 // XXX TODO return a Vec<(RistrettoPoint, usize)>
 // XXX error handling
 // XXX shortcut if counter is known
+// XXX [0u8; 30] encodes to the identity element
 pub fn encode_to_group(data: &[u8]) -> (RistrettoPoint, usize) {
     assert!(data.len() <= 30);
     let mut bytes = [0u8; 32];

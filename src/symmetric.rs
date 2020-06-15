@@ -30,6 +30,9 @@ use rand_core::RngCore;
 
 use sha2::Sha512;
 
+use subtle::Choice;
+use subtle::ConstantTimeEq;
+
 use crate::encoding::decode_from_group;
 use crate::encoding::encode_to_group;
 use crate::errors::CredentialError;
@@ -64,6 +67,50 @@ pub struct Keypair {
 pub type MasterSecret = [u8; 64];
 
 // XXX impl Drop for MasterSecret
+
+/// A plaintext encodes up to thrity bytes of information into a group element.
+#[derive(Clone, Debug)]
+pub struct Plaintext {
+    /// M1 = EncodeToG(m).
+    pub(crate) M1: RistrettoPoint,
+    /// M2 = HashToG(m).
+    pub(crate) M2: RistrettoPoint,
+    /// m3 = HashToZZq(m).
+    pub(crate) m3: Scalar,
+}
+
+impl From<&[u8; 30]> for Plaintext {
+    fn from(source: &[u8; 30]) -> Plaintext {
+        let (M1, _) = encode_to_group(source);
+        let M2: RistrettoPoint = RistrettoPoint::hash_from_bytes::<Sha512>(source);
+        let m3: Scalar = Scalar::hash_from_bytes::<Sha512>(source);
+
+        Plaintext { M1, M2, m3 }
+    }
+}
+
+// XXX TODO return attempt counter
+impl From<&Plaintext> for [u8; 30] {
+    fn from(source: &Plaintext) -> [u8; 30] {
+        decode_from_group(&source.M1).0
+    }
+}
+
+impl ConstantTimeEq for Plaintext {
+    fn ct_eq(&self, other: &Plaintext) -> Choice {
+        self.M1.compress().ct_eq(&other.M1.compress()) &
+        self.M2.compress().ct_eq(&other.M2.compress()) &
+        self.m3.ct_eq(&other.m3)
+    }
+}
+
+impl PartialEq for Plaintext {
+    fn eq(&self, other: &Plaintext) -> bool {
+        self.ct_eq(other).into()
+    }
+}
+
+impl Eq for Plaintext {}
 
 impl Keypair {
     /// Derive this [`Keypair`] from a master secret.
@@ -125,18 +172,13 @@ impl Keypair {
     /// DOCDOC
     pub fn encrypt(
         &self,
-        message: &[u8],
-    ) -> (Ciphertext, RistrettoPoint, RistrettoPoint, Scalar)
+        plaintext: &Plaintext,
+    ) -> Ciphertext
     {
-        // We let M1 = EncodeToG(m), M2 = HashToG(m), and m3 = HashToZZq(m).
-        let (M1, _) = encode_to_group(&message);
-        let M2: RistrettoPoint = RistrettoPoint::hash_from_bytes::<Sha512>(&message);
-        let m3: Scalar = Scalar::hash_from_bytes::<Sha512>(&message);
+        let E1: RistrettoPoint = plaintext.M2 * (self.secret.a0 + self.secret.a1 * plaintext.m3);
+        let E2: RistrettoPoint = E1 * self.secret.a + plaintext.M1;
 
-        let E1: RistrettoPoint = M2 * (self.secret.a0 + self.secret.a1 * m3);
-        let E2: RistrettoPoint = E1 * self.secret.a + M1;
-
-        (Ciphertext { E1, E2 }, M1, M2, m3)
+        Ciphertext { E1, E2 }
     }
 
     /// DOCDOC
@@ -144,16 +186,17 @@ impl Keypair {
     pub fn decrypt(
         &self,
         ciphertext: &Ciphertext,
-    ) -> Result<[u8; 30], CredentialError>
+    ) -> Result<Plaintext, CredentialError>
     {
-        let (m_prime, _) = decode_from_group(&(ciphertext.E2 - (ciphertext.E1 * self.secret.a)));
+        let M1_prime = ciphertext.E2 - (ciphertext.E1 * self.secret.a);
+        let (m_prime, _) = decode_from_group(&M1_prime);
         let m3_prime = Scalar::hash_from_bytes::<Sha512>(&m_prime);
 
-        let M1_prime = RistrettoPoint::hash_from_bytes::<Sha512>(&m_prime);
-        let E1_prime = M1_prime * (self.secret.a0 + self.secret.a1 * m3_prime);
+        let M2_prime = RistrettoPoint::hash_from_bytes::<Sha512>(&m_prime);
+        let E1_prime = M2_prime * (self.secret.a0 + self.secret.a1 * m3_prime);
 
         match ciphertext.E1 == E1_prime {
-            true => Ok(m_prime),
+            true => Ok(Plaintext { M1: M1_prime, M2: M2_prime, m3: m3_prime }),
             false => Err(CredentialError::UndecryptableAttribute),
         }
     }
@@ -177,10 +220,11 @@ mod test {
         let system_parameters = SystemParameters::hash_and_pray(&mut csprng, 2).unwrap();
         let (keypair, master_secret) = Keypair::generate(&system_parameters, &mut csprng);
         let message = [0u8; 30];
-        let (ciphertext, _, _, _) = keypair.encrypt(&message);
-        let plaintext = keypair.decrypt(&ciphertext);
+        let plaintext: Plaintext = (&message).into();
+        let ciphertext = keypair.encrypt(&plaintext);
+        let decrypted = keypair.decrypt(&ciphertext);
 
-        assert!(plaintext.is_ok());
-        assert_eq!(message, plaintext.unwrap());
+        assert!(decrypted.is_ok());
+        assert_eq!(plaintext, decrypted.unwrap());
     }
 }

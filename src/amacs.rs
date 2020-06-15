@@ -37,6 +37,7 @@ use zeroize::Zeroize;
 
 use crate::errors::MacError;
 use crate::parameters::SystemParameters;
+use crate::symmetric::Plaintext;
 
 /// An AMAC secret key is \(( (w, w', x_0, x_1, \vec{y_{n}}, W ) \in \mathbb{Z}_q \))
 /// where \(( W := G_w * w \)). (The \(( G_w \)) is one of the orthogonal generators
@@ -123,10 +124,18 @@ pub enum Attribute {
     PublicScalar(Scalar),
     SecretScalar(Scalar),
     PublicPoint(RistrettoPoint),
-    SecretPoint(RistrettoPoint),
+    SecretPoint(Plaintext),
 }
 
 // XXX impl Drop for Attribute?
+
+/// DOCDOC
+pub enum EncryptedAttribute {
+    PublicScalar(Scalar),
+    SecretScalar,
+    PublicPoint(RistrettoPoint),
+    SecretPoint,
+}
 
 /// Messages are computed from `Attribute`s by scalar multiplying the scalar
 /// portions by their respective generator in `SystemParameters.G_m`.
@@ -145,7 +154,7 @@ impl Messages {
                 Attribute::PublicScalar(m) => m * system_parameters.G_m[i],
                 Attribute::SecretScalar(m) => m * system_parameters.G_m[i],
                 Attribute::PublicPoint(M)  => *M,
-                Attribute::SecretPoint(M)  => *M,
+                Attribute::SecretPoint(p)  => p.M1,
             };
             messages.push(M_i);
         }
@@ -238,11 +247,15 @@ mod test {
         let sk = SecretKey::generate(&mut rng, &params);
         let mut messages = Vec::new();
 
+        let P1: Plaintext = (&[0u8; 30]).into();
+        let P2: Plaintext = (&[1u8; 30]).into();
+        let P3: Plaintext = (&[2u8; 30]).into();
+
         messages.push(Attribute::PublicScalar(Scalar::random(&mut rng)));
-        messages.push(Attribute::SecretPoint(RistrettoPoint::random(&mut rng)));
+        messages.push(Attribute::SecretPoint(P1));
         messages.push(Attribute::PublicScalar(Scalar::random(&mut rng)));
-        messages.push(Attribute::SecretPoint(RistrettoPoint::random(&mut rng)));
-        messages.push(Attribute::SecretPoint(RistrettoPoint::random(&mut rng)));
+        messages.push(Attribute::SecretPoint(P2));
+        messages.push(Attribute::SecretPoint(P3));
         messages.push(Attribute::SecretScalar(Scalar::random(&mut rng)));
         messages.push(Attribute::PublicPoint(RistrettoPoint::random(&mut rng)));
         messages.push(Attribute::PublicScalar(Scalar::random(&mut rng)));

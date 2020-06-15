@@ -27,9 +27,9 @@ use crate::parameters::SystemParameters;
 
 /// An anonymous credential issuer/verifier.
 pub struct Issuer {
-    system_parameters: SystemParameters,
-    issuer_parameters: IssuerParameters,
-    amacs_key: SecretKey,
+    pub system_parameters: SystemParameters,
+    pub issuer_parameters: IssuerParameters,
+    pub amacs_key: SecretKey,
 }
 
 impl Issuer {

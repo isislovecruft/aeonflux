@@ -21,13 +21,3 @@ pub struct AnonymousCredential {
     pub(crate) amac: Amac,
     pub(crate) attributes: Vec<Attribute>,
 }
-
-#[cfg(test)]
-mod test {
-    use super::*;
-
-    #[test]
-    fn credential_issuance() {
-
-    }
-}

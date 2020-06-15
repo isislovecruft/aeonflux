@@ -77,6 +77,7 @@ pub enum CredentialError {
     MacCreation,
     MacVerification,
     MissingData,
+    NoSymmetricKey,
     NoIssuerKey,
     NoIssuerParameters,
     NoSystemParameters,
@@ -101,6 +102,8 @@ impl fmt::Display for CredentialError {
                 => write!(f, "Could not verify a MAC"),
             CredentialError::MissingData
                 => write!(f, "Some data, such as a key or zkproof, was missing"),
+            CredentialError::NoSymmetricKey
+                => write!(f, "Encrypted group element attributes require a symmetric key"),
             CredentialError::NoIssuerKey
                 => write!(f, "The issuer was not initialised properly and has no secret key"),
             CredentialError::NoIssuerParameters
