@@ -31,7 +31,7 @@ curve25519-dalek = { version = "2", default-features = false, features = ["serde
 rand_core = { version = "0.5", default-features = false }
 serde = { version = "1" }
 sha2 = { version = "0.8", default-features = false }
-subtle = { version = "1" }
+subtle = { version = "2" }
 zeroize = { version = "1", default-features = false, features = ["zeroize_derive"] }
 zkp = { version = "0.7" }
 
