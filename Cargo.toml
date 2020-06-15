@@ -7,7 +7,7 @@ readme = "README.md"
 license = "BSD-3-Clause"
 categories = ["cryptography", "no-std"]
 keywords = ["MAC", "zero-knowledge", "anonymous", "credential", "algebraic-MAC"]
-description = "Composable, lightweight, fast attribute-based anonymous credentials with infinite (aeon) rerandomised (flux) presentations using algebraic message authentication codes (aMACs)"
+description = "Composable, lightweight, fast attribute-based anonymous credentials with infinite (aeon) rerandomised (flux) presentations using algebraic message authentication codes (aMACs), symmetric verifiable encryption, and non-interactive zero-knowledge proofs."
 exclude = [
     "**/.gitignore",
     ".gitignore",
