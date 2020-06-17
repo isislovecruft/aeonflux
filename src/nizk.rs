@@ -251,6 +251,7 @@ pub struct ProofOfEncryption {
     proof: CompactProof,
     public_key: SymmetricPublicKey,
     ciphertext: Ciphertext,
+    index: u16,
     C_y_1: RistrettoPoint,
     C_y_2: RistrettoPoint,
     C_y_3: RistrettoPoint,
@@ -265,6 +266,7 @@ impl ProofOfEncryption {
     ///
     /// * The [`SystemParameters`] for this anonymous credential instantiation,
     /// * A `plaintext` of up to thirty bytes.
+    /// * The `index` of the attribute to be encrypted.
     /// * A symmetric "keypair",
     /// * The nonce, `z`, must be reused from the outer-lying [`ProofOfValidCredential`].
     ///
@@ -274,6 +276,7 @@ impl ProofOfEncryption {
     pub fn prove(
         system_parameters: &SystemParameters,
         plaintext: &Plaintext,
+        index: u16,
         keypair: &SymmetricKeypair,
         z: &Scalar,
     ) -> ProofOfEncryption
@@ -284,7 +287,7 @@ impl ProofOfEncryption {
         // Compute the vector C of commitments to the plaintext.
         let C_y_1_ = (system_parameters.G_y[0] * z) + plaintext.M1;
         let C_y_2_ = (system_parameters.G_y[1] * z) + plaintext.M2;
-        let C_y_3_ = (system_parameters.G_y[2] * z) + (system_parameters.G_m[2] * plaintext.m3);
+        let C_y_3_ = (system_parameters.G_y[2] * z) + (system_parameters.G_m[index as usize] * plaintext.m3);
 
         // Compute C_y_2' = C_y_2 * a1.
         let C_y_2_prime_ = C_y_2_ * keypair.secret.a1;
@@ -312,7 +315,7 @@ impl ProofOfEncryption {
         let (G_y_1, _)          = prover.allocate_point(b"G_y_1",    system_parameters.G_y[0]);
         let (G_y_2, _)          = prover.allocate_point(b"G_y_2",    system_parameters.G_y[1]);
         let (G_y_3, _)          = prover.allocate_point(b"G_y_3",    system_parameters.G_y[2]);
-        let (G_m_3, _)          = prover.allocate_point(b"G_m_3",    system_parameters.G_m[2]);
+        let (G_m_3, _)          = prover.allocate_point(b"G_m_3",    system_parameters.G_m[index as usize]);
         let (C_y_2, _)          = prover.allocate_point(b"C_y_2",    C_y_2_);
         let (C_y_3, _)          = prover.allocate_point(b"C_y_3",    C_y_3_);
         let (C_y_2_prime, _)    = prover.allocate_point(b"C_y_2'",   C_y_2_prime_);
@@ -348,6 +351,7 @@ impl ProofOfEncryption {
             proof: proof,
             public_key: keypair.public,
             ciphertext: ciphertext_,
+            index: index,
             C_y_1: C_y_1_,
             C_y_2: C_y_2_,
             C_y_3: C_y_3_,
@@ -392,7 +396,7 @@ impl ProofOfEncryption {
         let G_y_1          = verifier.allocate_point(b"G_y_1",    system_parameters.G_y[0].compress())?;
         let G_y_2          = verifier.allocate_point(b"G_y_2",    system_parameters.G_y[1].compress())?;
         let G_y_3          = verifier.allocate_point(b"G_y_3",    system_parameters.G_y[2].compress())?;
-        let G_m_3          = verifier.allocate_point(b"G_m_3",    system_parameters.G_m[2].compress())?;
+        let G_m_3          = verifier.allocate_point(b"G_m_3",    system_parameters.G_m[self.index as usize].compress())?;
         let C_y_2          = verifier.allocate_point(b"C_y_2",    self.C_y_2.compress())?;
         let C_y_3          = verifier.allocate_point(b"C_y_3",    self.C_y_3.compress())?;
         let C_y_2_prime    = verifier.allocate_point(b"C_y_2'",   self.C_y_2_prime.compress())?;
@@ -661,7 +665,7 @@ impl ProofOfValidCredential {
                 Attribute::SecretPoint(pt) => {
                     // The .unwrap() here can never panic because we check above that the key isn't
                     // None if we have encrypted group element attributes.
-                    proofs_of_encryption.push((i as u16, ProofOfEncryption::prove(&system_parameters, &pt, &keypair.unwrap(), &z_)));
+                    proofs_of_encryption.push((i as u16, ProofOfEncryption::prove(&system_parameters, &pt, i as u16, &keypair.unwrap(), &z_)));
                     encrypted_attributes.push(EncryptedAttribute::SecretPoint);
                 },
             }
@@ -866,7 +870,7 @@ mod test {
         let message1: &[u8; 30] = b"This is a tsunami alert test..";
         let plaintext: Plaintext = message1.into();
 
-        let proof = ProofOfEncryption::prove(&system_parameters, &plaintext, &keypair, &z);
+        let proof = ProofOfEncryption::prove(&system_parameters, &plaintext, 1u16, &keypair, &z);
         let decryption = keypair.decrypt(&proof.ciphertext).unwrap();
 
         assert!(decryption.M1 == plaintext.M1);
@@ -883,7 +887,7 @@ mod test {
     }
 
     #[test]
-    fn credential_proof() {
+    fn credential_proof_8_attributes() {
         let mut rng = thread_rng();
         let system_parameters = SystemParameters::generate(&mut rng, 8).unwrap();
         let amacs_key = SecretKey::generate(&mut rng, &system_parameters);

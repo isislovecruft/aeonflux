@@ -32,6 +32,10 @@ use crate::errors::CredentialError;
 /// Given the `number_of_attributes`, calculate the size of a serialised
 /// [`SystemParameters`], in bytes.
 pub(crate) fn sizeof_system_parameters(number_of_attributes: u8) -> usize {
+    // G_y is always at least three elements
+    if number_of_attributes < 3 {
+        return 32 * (5 + 3 + number_of_attributes as usize + 4) + 1
+    }
     32 * (5 + (2 * number_of_attributes as usize) + 4) + 1
 }
 
@@ -111,7 +115,13 @@ impl SystemParameters {
 
         let mut G_y: Vec<RistrettoPoint> = Vec::with_capacity(NUMBER_OF_ATTRIBUTES as usize);
         
-        for i in 0..NUMBER_OF_ATTRIBUTES {
+        let mut number_of_G_y = NUMBER_OF_ATTRIBUTES;
+
+        if number_of_G_y < 3 {
+            number_of_G_y = 3;
+        }
+
+        for i in 0..number_of_G_y {
             chunk.copy_from_slice(&bytes[index..index+32]); index += 32;
             G_y.push(try_deserialise!(format!("G_y_{}", i), chunk));
         }
@@ -149,7 +159,13 @@ impl SystemParameters {
         v.extend(self.G_x_0.compress().to_bytes().iter());
         v.extend(self.G_x_1.compress().to_bytes().iter());
 
-        for i in 0..self.NUMBER_OF_ATTRIBUTES as usize {
+        let mut number_of_G_y = self.NUMBER_OF_ATTRIBUTES;
+
+        if number_of_G_y < 3 {
+            number_of_G_y = 3;
+        }
+
+        for i in 0..number_of_G_y as usize {
             v.extend(self.G_y[i].compress().to_bytes().iter());
         }
 
@@ -213,7 +229,15 @@ impl SystemParameters {
             G_x_1 = CompressedRistretto(tmp).decompress();
         }
 
-        for _ in 0..number_of_attributes {
+        // The number of elements in G_y must always be at least three in order
+        // to support encrypted group element attributes.
+        let mut number_of_G_y: usize = number_of_attributes as usize;
+
+        if number_of_G_y < 3 {
+            number_of_G_y = 3;
+        }
+
+        for _ in 0..number_of_G_y {
             let mut G_y_i: Option<RistrettoPoint> = None;
 
             while G_y_i.is_none() {
