@@ -26,6 +26,10 @@ name = "aeonflux"
 rustdoc-args = ["--html-in-header", ".cargo/registry/src/github.com-1ecc6299db9ec823/curve25519-dalek-0.13.2/rustdoc-include-katex-header.html"]
 features = ["nightly"]
 
+[[bench]]
+name = "aeonflux_benchmarks"
+harness = false
+
 [dependencies]
 curve25519-dalek = { version = "2", default-features = false, features = ["serde"] }
 rand_core = { version = "0.5", default-features = false }
@@ -36,6 +40,8 @@ zeroize = { version = "1", default-features = false, features = ["zeroize_derive
 zkp = { version = "0.7" }
 
 [dev-dependencies]
+criterion = "*"
+curve25519-dalek = { version = "2", default-features = false }
 rand = { version = "0.7" }
 
 [features]
