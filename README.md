@@ -19,7 +19,7 @@ all the attributes on their credentials to the issuer when requesting a new
 credential.  When presenting said credential afterwards, attributes may be
 either hidden or revealed.
 
-Credentials may be either scalars (integers modulo the group order, a large
+Credential attributes may be either scalars (integers modulo the group order, a large
 prime) or group elements.  This library provides a way to encode arbitrary byte
 arrays to group elements---which may then be encrypted and decrypted---in an
 invertible manner, such that arbitrary strings can be stored as attributes.
