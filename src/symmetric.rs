@@ -24,6 +24,7 @@
 
 use curve25519_dalek::ristretto::RistrettoPoint;
 use curve25519_dalek::scalar::Scalar;
+use curve25519_dalek::traits::Identity;
 
 use rand_core::CryptoRng;
 use rand_core::RngCore;
@@ -33,6 +34,8 @@ use sha2::Sha512;
 use subtle::Choice;
 use subtle::ConstantTimeEq;
 
+use zeroize::Zeroize;
+
 use crate::encoding::decode_from_group;
 use crate::encoding::encode_to_group;
 use crate::errors::CredentialError;
@@ -40,14 +43,20 @@ use crate::parameters::SystemParameters;
 
 /// A secret key, used for hidden group element attributes during credential
 /// presentation.
-#[derive(Clone)]
+#[derive(Clone, Zeroize)]
 pub(crate) struct SecretKey {
     pub(crate) a: Scalar,
     pub(crate) a0: Scalar,
     pub(crate) a1: Scalar,
 }
 
-// XXX impl Drop for SecretKey
+/// Overwrite the secret key material with zeroes (and the identity element)
+/// when it drops out of scope.
+impl Drop for SecretKey {
+    fn drop(&mut self) {
+        self.zeroize();
+    }
+}
 
 /// A public key, used for verification of a symmetrica encryption.
 #[derive(Clone, Copy)]
@@ -58,7 +67,9 @@ pub struct PublicKey {
 /// A keypair for encryption of hidden group element attributes.
 #[derive(Clone)]
 pub struct Keypair {
+    /// The secret portion of this keypair.
     pub(crate) secret: SecretKey,
+    /// The public portion of this keypair.
     pub public: PublicKey,
 }
 
@@ -77,6 +88,25 @@ pub struct Plaintext {
     pub(crate) M2: RistrettoPoint,
     /// m3 = HashToZZq(m).
     pub(crate) m3: Scalar,
+}
+
+// We can't derive this because generally in elliptic curve cryptography group
+// elements aren't used as secrets, thus curve25519-dalek doesn't impl Zeroize
+// for RistrettoPoint.
+impl Zeroize for Plaintext {
+    fn zeroize(&mut self) {
+        self.M1 = RistrettoPoint::identity();
+        self.M2 = RistrettoPoint::identity();
+        self.m3.zeroize();
+    }
+}
+
+/// Overwrite the plaintext with zeroes (and the identity element)
+/// when it drops out of scope.
+impl Drop for Plaintext {
+    fn drop(&mut self) {
+        self.zeroize();
+    }
 }
 
 impl From<&[u8; 30]> for Plaintext {

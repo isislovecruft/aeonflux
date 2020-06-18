@@ -17,11 +17,19 @@ use std::vec::Vec;
 use rand_core::CryptoRng;
 use rand_core::RngCore;
 
+use serde::de::Deserialize;
+use serde::de::Deserializer;
+use serde::de::Visitor;
+use serde::ser::Serialize;
+use serde::ser::Serializer;
+
+use crate::amacs::sizeof_secret_key;
 use crate::amacs::Amac;
 use crate::amacs::Attribute;
 use crate::amacs::SecretKey;
 use crate::credential::AnonymousCredential;
 use crate::errors::CredentialError;
+use crate::parameters::sizeof_system_parameters;
 use crate::parameters::IssuerParameters;
 use crate::parameters::SystemParameters;
 
@@ -33,16 +41,30 @@ pub struct Issuer {
 }
 
 impl Issuer {
-    pub fn new(
+    /// Create a new anonymous credential issuer and verifier.
+    ///
+    /// # Inputs
+    ///
+    /// * Some previously generated [`SystemParameters`].
+    /// * A cryptographically secure PRNG.
+    ///
+    /// # Returns
+    ///
+    /// An new issuer.
+    pub fn new<C>(
         system_parameters: &SystemParameters,
-        issuer_parameters: &IssuerParameters,
-        amacs_key: &SecretKey
+        csprng: &mut C,
     ) -> Issuer
+    where
+        C: CryptoRng + RngCore,
     {
+        let amacs_key = SecretKey::generate(csprng, &system_parameters);
+        let issuer_parameters = IssuerParameters::generate(&system_parameters, &amacs_key);
+
         Issuer {
             system_parameters: system_parameters.clone(),
-            issuer_parameters: issuer_parameters.clone(),
-            amacs_key: amacs_key.clone(),
+            issuer_parameters: issuer_parameters,
+            amacs_key: amacs_key,
         }
     }
 
@@ -76,3 +98,32 @@ impl Issuer {
         }
     }
 }
+
+impl Issuer {
+    /// Create an [`Issuer`] from bytes.
+    pub fn from_bytes(bytes: &[u8]) -> Result<Issuer, CredentialError> {
+        let system_parameters = SystemParameters::from_bytes(&bytes)?;
+        let offset = sizeof_system_parameters(system_parameters.NUMBER_OF_ATTRIBUTES);
+        let issuer_parameters = IssuerParameters::from_bytes(&bytes[offset..offset+64])?;
+        let amacs_key = SecretKey::from_bytes(&bytes[offset+64..])?;
+
+        Ok(Issuer { system_parameters, issuer_parameters, amacs_key })
+    }
+
+    /// Serialise this [`Issuer`] to a byte array.
+    pub fn to_bytes(&self) -> Vec<u8> {
+        let size = 64 +
+            sizeof_system_parameters(self.system_parameters.NUMBER_OF_ATTRIBUTES) +
+            sizeof_secret_key(self.system_parameters.NUMBER_OF_ATTRIBUTES);
+            
+        let mut bytes: Vec<u8> = Vec::with_capacity(size);
+
+        bytes.extend(self.system_parameters.to_bytes());
+        bytes.extend(self.issuer_parameters.to_bytes());
+        bytes.extend(self.amacs_key.to_bytes());
+
+        bytes
+    }
+}
+
+impl_serde_with_to_bytes_and_from_bytes!(Issuer, "A valid byte sequence representing an Issuer");
