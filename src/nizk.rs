@@ -40,7 +40,6 @@ use zkp::toolbox::verifier::ScalarVar as VerifierScalarVar;
 use crate::amacs::Attribute;
 use crate::amacs::EncryptedAttribute;
 use crate::amacs::Messages;
-use crate::amacs::SecretKey;
 use crate::credential::AnonymousCredential;
 use crate::errors::CredentialError;
 use crate::issuer::Issuer;
@@ -58,9 +57,7 @@ pub struct ProofOfIssuance(CompactProof);
 impl ProofOfIssuance {
     /// Create a [`ProofOfIssuance`].
     pub fn prove(
-        secret_key: &SecretKey,
-        system_parameters: &SystemParameters,
-        issuer_parameters: &IssuerParameters,
+        issuer: &Issuer,
         credential: &AnonymousCredential,
     ) -> ProofOfIssuance
     {
@@ -71,14 +68,14 @@ impl ProofOfIssuance {
         let mut prover = Prover::new(b"2019/1416 issuance proof", &mut transcript);
 
         // Commit the names of the Camenisch-Stadler secrets to the protocol transcript.
-        let w       = prover.allocate_scalar(b"w",   secret_key.w);
-        let w_prime = prover.allocate_scalar(b"w'",  secret_key.w_prime);
-        let x_0     = prover.allocate_scalar(b"x_0", secret_key.x_0);
-        let x_1     = prover.allocate_scalar(b"x_1", secret_key.x_1);
+        let w       = prover.allocate_scalar(b"w",   issuer.amacs_key.w);
+        let w_prime = prover.allocate_scalar(b"w'",  issuer.amacs_key.w_prime);
+        let x_0     = prover.allocate_scalar(b"x_0", issuer.amacs_key.x_0);
+        let x_1     = prover.allocate_scalar(b"x_1", issuer.amacs_key.x_1);
 
-        let mut y: Vec<ScalarVar> = Vec::with_capacity(system_parameters.NUMBER_OF_ATTRIBUTES as usize);
+        let mut y: Vec<ScalarVar> = Vec::with_capacity(issuer.system_parameters.NUMBER_OF_ATTRIBUTES as usize);
 
-        for (i, y_i) in secret_key.y.iter().enumerate() {
+        for (i, y_i) in issuer.amacs_key.y.iter().enumerate() {
             // XXX fix the zkp crate to take Strings
             //y.push(prover.allocate_scalar(format!("y_{}", i), y_i));
             y.push(prover.allocate_scalar(b"y", *y_i));
@@ -92,16 +89,16 @@ impl ProofOfIssuance {
         let t = prover.allocate_scalar(b"t", credential.amac.t);
 
         // Commit to the values and names of the Camenisch-Stadler publics.
-        let (neg_G_V, _)   = prover.allocate_point(b"-G_V",     -system_parameters.G_V);
-        let (G, _)         = prover.allocate_point(b"G",         system_parameters.G);
-        let (G_w, _)       = prover.allocate_point(b"G_w",       system_parameters.G_w);
-        let (G_w_prime, _) = prover.allocate_point(b"G_w_prime", system_parameters.G_w_prime);
-        let (G_x_0, _)     = prover.allocate_point(b"G_x_0",     system_parameters.G_x_0);
-        let (G_x_1, _)     = prover.allocate_point(b"G_x_1",     system_parameters.G_x_1);
+        let (neg_G_V, _)   = prover.allocate_point(b"-G_V",     -issuer.system_parameters.G_V);
+        let (G, _)         = prover.allocate_point(b"G",         issuer.system_parameters.G);
+        let (G_w, _)       = prover.allocate_point(b"G_w",       issuer.system_parameters.G_w);
+        let (G_w_prime, _) = prover.allocate_point(b"G_w_prime", issuer.system_parameters.G_w_prime);
+        let (G_x_0, _)     = prover.allocate_point(b"G_x_0",     issuer.system_parameters.G_x_0);
+        let (G_x_1, _)     = prover.allocate_point(b"G_x_1",     issuer.system_parameters.G_x_1);
 
-        let mut G_y: Vec<PointVar> = Vec::with_capacity(system_parameters.NUMBER_OF_ATTRIBUTES as usize);
+        let mut G_y: Vec<PointVar> = Vec::with_capacity(issuer.system_parameters.NUMBER_OF_ATTRIBUTES as usize);
 
-        for (i, G_y_i) in system_parameters.G_y.iter().enumerate() {
+        for (i, G_y_i) in issuer.system_parameters.G_y.iter().enumerate() {
             // XXX fix the zkp crate to take Strings
             //let (G_y_x, _) = prover.allocate_point(format!("G_y_{}", i), G_y_i);
             let (G_y_x, _) = prover.allocate_point(b"G_y", *G_y_i);
@@ -109,14 +106,14 @@ impl ProofOfIssuance {
             G_y.push(G_y_x);
         }
 
-        let (C_W, _) = prover.allocate_point(b"C_W", issuer_parameters.C_W);
-        let (I, _)   = prover.allocate_point(b"I",   issuer_parameters.I);
+        let (C_W, _) = prover.allocate_point(b"C_W", issuer.issuer_parameters.C_W);
+        let (I, _)   = prover.allocate_point(b"I",   issuer.issuer_parameters.I);
         let (U, _)   = prover.allocate_point(b"U", credential.amac.U);
         let (V, _)   = prover.allocate_point(b"V", credential.amac.V);
 
-        let mut M: Vec<PointVar> = Vec::with_capacity(system_parameters.NUMBER_OF_ATTRIBUTES as usize);
+        let mut M: Vec<PointVar> = Vec::with_capacity(issuer.system_parameters.NUMBER_OF_ATTRIBUTES as usize);
 
-        let messages: Messages = Messages::from_attributes(&credential.attributes, system_parameters);
+        let messages: Messages = Messages::from_attributes(&credential.attributes, &issuer.system_parameters);
 
         for (i, M_i) in messages.0.iter().enumerate() {
             // XXX fix the zkp crate to take Strings
@@ -130,7 +127,7 @@ impl ProofOfIssuance {
         prover.constrain(C_W, vec![(w, G_w), (w_prime, G_w_prime)]);
 
         // Constraint #2: I = -G_V + G_x_0 * x_0 + G_x_1 * x_1 + G_y_1 * y_1 + ... + G_y_n * y_n
-        let mut rhs: Vec<(ScalarVar, PointVar)> = Vec::with_capacity(3 + system_parameters.NUMBER_OF_ATTRIBUTES as usize);
+        let mut rhs: Vec<(ScalarVar, PointVar)> = Vec::with_capacity(3 + issuer.system_parameters.NUMBER_OF_ATTRIBUTES as usize);
 
         rhs.push((one, neg_G_V));
         rhs.push((x_0, G_x_0));
@@ -140,7 +137,7 @@ impl ProofOfIssuance {
         prover.constrain(I, rhs);
 
         // Constraint #3: V = G_w * w + U * x_0 + U * x_1 + U * t + \sigma{i=1}{n} M_i * y_i
-        let mut rhs: Vec<(ScalarVar, PointVar)> = Vec::with_capacity(4 + system_parameters.NUMBER_OF_ATTRIBUTES as usize);
+        let mut rhs: Vec<(ScalarVar, PointVar)> = Vec::with_capacity(4 + issuer.system_parameters.NUMBER_OF_ATTRIBUTES as usize);
 
         rhs.push((w, G_w));
         rhs.push((x_0, U));
@@ -815,9 +812,7 @@ mod test {
     fn issuance_proof() {
         let mut rng = thread_rng();
         let system_parameters = SystemParameters::generate(&mut rng, 5).unwrap();
-        let amacs_key = SecretKey::generate(&mut rng, &system_parameters);
-        let issuer_parameters = IssuerParameters::generate(&system_parameters, &amacs_key);
-        let issuer = Issuer::new(&system_parameters, &issuer_parameters, &amacs_key);
+        let issuer = Issuer::new(&system_parameters, &mut rng);
         let plaintext: Plaintext = (&[1u8; 30]).into();
 
         let mut attributes = Vec::new();
@@ -828,8 +823,8 @@ mod test {
         attributes.push(Attribute::SecretScalar(Scalar::random(&mut rng)));
 
         let credential = issuer.issue(attributes, &mut rng).unwrap();
-        let proof = ProofOfIssuance::prove(&amacs_key, &system_parameters, &issuer_parameters, &credential);
-        let verification = proof.verify(&system_parameters, &issuer_parameters, &credential);
+        let proof = ProofOfIssuance::prove(&issuer, &credential);
+        let verification = proof.verify(&system_parameters, &issuer.issuer_parameters, &credential);
 
         assert!(verification.is_ok());
     }
@@ -840,9 +835,7 @@ mod test {
     fn issuance_proof_identity_plaintext() {
         let mut rng = thread_rng();
         let system_parameters = SystemParameters::generate(&mut rng, 5).unwrap();
-        let amacs_key = SecretKey::generate(&mut rng, &system_parameters);
-        let issuer_parameters = IssuerParameters::generate(&system_parameters, &amacs_key);
-        let issuer = Issuer::new(&system_parameters, &issuer_parameters, &amacs_key);
+        let issuer = Issuer::new(&system_parameters, &mut rng);
         let plaintext: Plaintext = (&[0u8; 30]).into();
 
         assert!(plaintext.M1.is_identity());
@@ -855,8 +848,8 @@ mod test {
         attributes.push(Attribute::SecretScalar(Scalar::random(&mut rng)));
 
         let credential = issuer.issue(attributes, &mut rng).unwrap();
-        let proof = ProofOfIssuance::prove(&amacs_key, &system_parameters, &issuer_parameters, &credential);
-        let verification = proof.verify(&system_parameters, &issuer_parameters, &credential);
+        let proof = ProofOfIssuance::prove(&issuer, &credential);
+        let verification = proof.verify(&system_parameters, &issuer.issuer_parameters, &credential);
 
         assert!(verification.is_ok());
     }
@@ -890,9 +883,7 @@ mod test {
     fn credential_proof_8_attributes() {
         let mut rng = thread_rng();
         let system_parameters = SystemParameters::generate(&mut rng, 8).unwrap();
-        let amacs_key = SecretKey::generate(&mut rng, &system_parameters);
-        let issuer_parameters = IssuerParameters::generate(&system_parameters, &amacs_key);
-        let issuer = Issuer::new(&system_parameters, &issuer_parameters, &amacs_key);
+        let issuer = Issuer::new(&system_parameters, &mut rng);
         let plaintext: Plaintext = b"This is a tsunami alert test..".into();
 
         let mut attributes = Vec::new();
@@ -908,7 +899,7 @@ mod test {
 
         let credential = issuer.issue(attributes, &mut rng).unwrap();
         let (keypair, master_secret) = SymmetricKeypair::generate(&system_parameters, &mut rng);
-        let proof = ProofOfValidCredential::prove(&system_parameters, &issuer_parameters, &credential, Some(&keypair), &mut rng);
+        let proof = ProofOfValidCredential::prove(&system_parameters, &issuer.issuer_parameters, &credential, Some(&keypair), &mut rng);
 
         assert!(proof.is_ok());
 
@@ -916,4 +907,27 @@ mod test {
 
         assert!(verification.is_ok());
     }
+
+    #[test]
+    fn credential_proof_1_attribute() {
+        let mut rng = thread_rng();
+        let system_parameters = SystemParameters::generate(&mut rng, 1).unwrap();
+        let issuer = Issuer::new(&system_parameters, &mut rng);
+        let plaintext: Plaintext = b"This is a tsunami alert test..".into();
+
+        let mut attributes = Vec::new();
+
+        attributes.push(Attribute::SecretPoint(plaintext));
+
+        let credential = issuer.issue(attributes, &mut rng).unwrap();
+        let (keypair, _) = SymmetricKeypair::generate(&system_parameters, &mut rng);
+        let proof = ProofOfValidCredential::prove(&system_parameters, &issuer.issuer_parameters, &credential, Some(&keypair), &mut rng);
+
+        assert!(proof.is_ok());
+
+        let verification = proof.unwrap().verify(&issuer, &credential);
+
+        assert!(verification.is_ok());
+    }
+
 }

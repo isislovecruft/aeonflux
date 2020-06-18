@@ -46,4 +46,57 @@ I'm likely not _your_ cryptographer.  Use at your own risk.
  Usage
 -------
 
-XXX
+```rust
+extern crate aeonflux;
+extern crate curve25519_dalek;
+extern crate rand;
+
+use aeonflux::amacs::Attribute;
+use aeonflux::issuer::Issuer;
+use aeonflux::parameters::IssuerParameters;
+use aeonflux::parameters::SystemParameters;
+use aeonflux::symmetric::Plaintext;
+use aeonflux::symmetric::Keypair as SymmetricKeypair;
+
+use curve25519_dalek::ristretto::RistrettoPoint;
+use curve25519_dalek::scalar::Scalar;
+
+use rand::thread_rng;
+
+// First we set up an anonymous credential issuer.  We have to specify
+// the number of attributes the credentials will have (here, eight),
+// but not their type.
+let mut rng = thread_rng();
+let system_parameters = SystemParameters::generate(&mut rng, 8).unwrap();
+let issuer = Issuer::new(&system_parameters, &mut rng);
+
+// Our user creates a request for a new credential with some revealed
+// attributes and sends it to the issuer.
+let plaintext: Plaintext = b"This is a tsunami alert test..".into();
+
+let mut attributes = Vec::new();
+
+attributes.push(Attribute::SecretPoint(plaintext));
+attributes.push(Attribute::SecretScalar(Scalar::random(&mut rng)));
+attributes.push(Attribute::SecretScalar(Scalar::random(&mut rng)));
+attributes.push(Attribute::PublicScalar(Scalar::random(&mut rng)));
+attributes.push(Attribute::PublicPoint(RistrettoPoint::random(&mut rng)));
+attributes.push(Attribute::SecretScalar(Scalar::random(&mut rng)));
+attributes.push(Attribute::PublicScalar(Scalar::random(&mut rng)));
+attributes.push(Attribute::PublicPoint(RistrettoPoint::random(&mut rng)));
+
+let credential = issuer.issue(attributes, &mut rng).unwrap();
+
+// Optionally, upon showing the credential, the user can create a
+// keypair and encrypt some or all of the attributes.  The master secret
+// can be stored to regenerate the full keypair later on.  Encryption
+// keys can be rotated to rerandomise the encrypted attributes.
+let (keypair, master_secret) = SymmetricKeypair::generate(&system_parameters, &mut rng);
+let proof = credential.show(&system_parameters, &issuer.issuer_parameters, Some(&keypair), &mut rng);
+
+assert!(proof.is_ok());
+
+let verification = proof.unwrap().verify(&issuer, &credential);
+
+assert!(verification.is_ok());
+```

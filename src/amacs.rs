@@ -39,6 +39,11 @@ use crate::errors::MacError;
 use crate::parameters::SystemParameters;
 use crate::symmetric::Plaintext;
 
+/// Determine the size of a [`SecretKey`], in bytes.
+pub(crate) fn sizeof_secret_key(number_of_attributes: u8) -> usize {
+    32 * (6 + number_of_attributes) as usize
+}
+
 /// An AMAC secret key is \(( (w, w', x_0, x_1, \vec{y_{n}}, W ) \in \mathbb{Z}_q \))
 /// where \(( W := G_w * w \)). (The \(( G_w \)) is one of the orthogonal generators
 /// from the [`SystemParameters`].)
@@ -101,12 +106,12 @@ impl SecretKey {
     }
 
     /// DOCDOC
-    pub fn from_bytes(bytes: &[u8]) -> Result<SecretKey, MacError> {
+    pub(crate) fn from_bytes(bytes: &[u8]) -> Result<SecretKey, MacError> {
         unimplemented!()
     }
 
     /// DOCDOC
-    pub fn to_bytes(&self) -> Vec<u8> {
+    pub(crate) fn to_bytes(&self) -> Vec<u8> {
         unimplemented!()
     }
 }
@@ -120,20 +125,54 @@ impl_serde_with_to_bytes_and_from_bytes!(SecretKey, "A valid byte sequence repre
 /// When a `Credential` is shown, its attributes may be either revealed or
 /// hidden from the credential issuer.  These represent all the valid attribute
 /// types.
+#[derive(Clone)]
 pub enum Attribute {
+    /// A scalar attribute which is revealed upon credential presentation.
     PublicScalar(Scalar),
+    /// A scalar attribute which is hidden upon credential presentation.
     SecretScalar(Scalar),
+    /// A group element attribute which is revealed upon credential presentation.
     PublicPoint(RistrettoPoint),
+    /// A group element attribute which is hidden upon credential presentation.
     SecretPoint(Plaintext),
 }
 
-// XXX impl Drop for Attribute?
+// We can't derive this because generally in elliptic curve cryptography group
+// elements aren't used as secrets, thus curve25519-dalek doesn't impl Zeroize
+// for RistrettoPoint.
+impl Zeroize for Attribute {
+    fn zeroize(&mut self) {
+        match self {
+            Attribute::SecretScalar(x) => x.zeroize(),
+            Attribute::SecretPoint(x) => x.zeroize(),
+            _ => return,
+        }
+    }
+}
 
-/// DOCDOC
+/// Overwrite the secret attributes with zeroes (and the identity element)
+/// when it drops out of scope.
+impl Drop for Attribute {
+    fn drop(&mut self) {
+        self.zeroize();
+    }
+}
+
+
+/// These are the form of the attributes during credential presentation, when
+/// some may be be hidden either by commiting to them and proving them in
+/// zero-knowledge (as is the case for hidden scalar attributes) or by
+/// encrypting them and proving the ciphertext's validity in zero-knowledge (as
+/// is the case for the hidden group element attributes).
+#[derive(Clone)]
 pub enum EncryptedAttribute {
+    /// A scalar attribute which is revealed upon credential presentation.
     PublicScalar(Scalar),
+    /// A scalar attribute which is hidden upon credential presentation.
     SecretScalar,
+    /// A group element attribute which is revealed upon credential presentation.
     PublicPoint(RistrettoPoint),
+    /// A group element attribute which is hidden upon credential presentation.
     SecretPoint,
 }
 
@@ -163,10 +202,10 @@ impl Messages {
 }
 
 /// An algebraic message authentication code, \(( (t,U,V) \in \mathbb{Z}_q \times \mathbb{G} \times \mathbb{G} \)).
-pub struct Amac {
-    pub t: Scalar,
-    pub U: RistrettoPoint,
-    pub V: RistrettoPoint,
+pub(crate) struct Amac {
+    pub(crate) t: Scalar,
+    pub(crate) U: RistrettoPoint,
+    pub(crate) V: RistrettoPoint,
 }
 
 impl Amac {
@@ -191,7 +230,7 @@ impl Amac {
 
     /// Compute an algebraic message authentication code with a secret key for a
     /// vector of messages.
-    pub fn tag<R>(
+    pub(crate) fn tag<R>(
         csprng: &mut R,
         system_parameters: &SystemParameters,
         secret_key: &SecretKey,
@@ -213,7 +252,7 @@ impl Amac {
     }
 
     /// Verify this algebraic MAC w.r.t. a secret key and vector of messages.
-    pub fn verify(
+    pub(crate) fn verify(
         &self,
         system_parameters: &SystemParameters,
         secret_key: &SecretKey,

@@ -8,6 +8,8 @@
 // Authors:
 // - isis agora lovecruft <isis@patternsinthevoid.net>
 
+//! Errors which may occur during anonymous credential issuance and verification.
+
 #[cfg(feature = "std")]
 use std::convert::From;
 #[cfg(feature = "std")]
@@ -32,7 +34,7 @@ use core::option::NoneError;
 use zkp::ProofError;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
-pub enum MacError {
+pub(crate) enum MacError {
     KeypairDeserialisation,
     PointDecompressionError,
     ScalarFormatError,

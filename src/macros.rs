@@ -8,7 +8,6 @@
 // Authors:
 // - isis agora lovecruft <isis@patternsinthevoid.net>
 
-#[macro_export]
 macro_rules! impl_serde_with_to_bytes_and_from_bytes {
     ($t:tt, $expecting:expr) => {
         impl Serialize for $t {
