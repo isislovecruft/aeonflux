@@ -29,7 +29,7 @@ use curve25519_dalek::traits::Identity;
 use rand_core::CryptoRng;
 use rand_core::RngCore;
 
-use sha2::Sha512;
+use sha2::{Digest, Sha512};
 
 use subtle::Choice;
 use subtle::ConstantTimeEq;
@@ -112,8 +112,9 @@ impl Drop for Plaintext {
 impl From<&[u8; 30]> for Plaintext {
     fn from(source: &[u8; 30]) -> Plaintext {
         let (M1, _) = encode_to_group(source);
-        let M2: RistrettoPoint = RistrettoPoint::hash_from_bytes::<Sha512>(source);
-        let m3: Scalar = Scalar::hash_from_bytes::<Sha512>(source);
+        let h = Sha512::default().chain(&source);
+        let M2: RistrettoPoint = RistrettoPoint::from_hash(h.clone().chain(b"M2"));
+        let m3: Scalar = Scalar::from_hash(h.chain(b"m3"));
 
         Plaintext { M1, M2, m3 }
     }
@@ -158,9 +159,10 @@ impl Keypair {
         system_parameters: &SystemParameters
     ) -> Keypair
     {
-        let a: Scalar = Scalar::hash_from_bytes::<Sha512>(&master_secret[..]);
-        let a0: Scalar = Scalar::hash_from_bytes::<Sha512>(a.as_bytes());
-        let a1: Scalar = Scalar::hash_from_bytes::<Sha512>(a0.as_bytes());
+        let h = Sha512::default().chain(&master_secret[..]);
+        let a: Scalar = Scalar::from_hash(h.clone().chain(b"a."));
+        let a0: Scalar = Scalar::from_hash(h.clone().chain(b"a0"));
+        let a1: Scalar = Scalar::from_hash(h.chain(b"a1"));
 
         let pk: RistrettoPoint =
             (system_parameters.G_a  * a) +
@@ -220,9 +222,9 @@ impl Keypair {
     {
         let M1_prime = ciphertext.E2 - (ciphertext.E1 * self.secret.a);
         let (m_prime, _) = decode_from_group(&M1_prime);
-        let m3_prime = Scalar::hash_from_bytes::<Sha512>(&m_prime);
-
-        let M2_prime = RistrettoPoint::hash_from_bytes::<Sha512>(&m_prime);
+        let h = Sha512::default().chain(&m_prime);
+        let M2_prime: RistrettoPoint = RistrettoPoint::from_hash(h.clone().chain(b"M2"));
+        let m3_prime: Scalar = Scalar::from_hash(h.chain(b"m3"));
         let E1_prime = M2_prime * (self.secret.a0 + self.secret.a1 * m3_prime);
 
         match ciphertext.E1 == E1_prime {
@@ -248,7 +250,7 @@ mod test {
     fn encrypt_decrypt_roundtrip() {
         let mut csprng = thread_rng();
         let system_parameters = SystemParameters::hash_and_pray(&mut csprng, 2).unwrap();
-        let (keypair, master_secret) = Keypair::generate(&system_parameters, &mut csprng);
+        let (keypair, _master_secret) = Keypair::generate(&system_parameters, &mut csprng);
         let message = [0u8; 30];
         let plaintext: Plaintext = (&message).into();
         let ciphertext = keypair.encrypt(&plaintext);

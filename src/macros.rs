@@ -37,8 +37,8 @@ macro_rules! impl_serde_with_to_bytes_and_from_bytes {
                         match $t::from_bytes(v) {
                             Ok(x)   => Ok(x),
                             Err(_x) => {
-                                #[cfg(feature = "std")]
-                                println!("Error while deserialising {}: {:?}", stringify!($t), _x);
+                                #[cfg(all(debug_assertions, feature = "std", feature = "debug-errors"))]
+                                eprintln!("Error while deserialising {}: {:?}", stringify!($t), _x);
                                 Err(serde::de::Error::invalid_length(v.len(), &self))
                             },
                         }

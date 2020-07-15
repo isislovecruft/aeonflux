@@ -63,8 +63,8 @@ impl Issuer {
 
         Issuer {
             system_parameters: system_parameters.clone(),
-            issuer_parameters: issuer_parameters,
-            amacs_key: amacs_key,
+            issuer_parameters,
+            amacs_key,
         }
     }
 
