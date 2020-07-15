@@ -106,7 +106,7 @@ impl SecretKey {
     }
 
     /// DOCDOC
-    pub(crate) fn from_bytes(bytes: &[u8]) -> Result<SecretKey, MacError> {
+    pub(crate) fn from_bytes(_bytes: &[u8]) -> Result<SecretKey, MacError> {
         unimplemented!()
     }
 
@@ -145,7 +145,7 @@ impl Zeroize for Attribute {
         match self {
             Attribute::SecretScalar(x) => x.zeroize(),
             Attribute::SecretPoint(x) => x.zeroize(),
-            _ => return,
+            _ => (),
         }
     }
 }
@@ -182,7 +182,7 @@ pub struct Messages(pub(crate) Vec<RistrettoPoint>);
 
 impl Messages {
     pub(crate) fn from_attributes(
-        attributes: &Vec<Attribute>,
+        attributes: &[Attribute],
         system_parameters: &SystemParameters
     ) -> Messages
     {
@@ -213,7 +213,7 @@ impl Amac {
     fn compute_V(
         system_parameters: &SystemParameters,
         secret_key: &SecretKey,
-        attributes: &Vec<Attribute>,
+        attributes: &[Attribute],
         t: &Scalar,
         U: &RistrettoPoint,
     ) -> RistrettoPoint
@@ -234,7 +234,7 @@ impl Amac {
         csprng: &mut R,
         system_parameters: &SystemParameters,
         secret_key: &SecretKey,
-        messages: &Vec<Attribute>,
+        messages: &[Attribute],
     ) -> Result<Amac, MacError>
     where
         R: RngCore + CryptoRng,
@@ -256,7 +256,7 @@ impl Amac {
         &self,
         system_parameters: &SystemParameters,
         secret_key: &SecretKey,
-        messages: &Vec<Attribute>,
+        messages: &[Attribute],
     ) -> bool {
         let V_prime = Amac::compute_V(system_parameters, secret_key, messages, &self.t, &self.U);
 

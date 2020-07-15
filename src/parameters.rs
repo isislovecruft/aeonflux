@@ -34,9 +34,12 @@ use crate::errors::CredentialError;
 pub(crate) fn sizeof_system_parameters(number_of_attributes: u8) -> usize {
     // G_y is always at least three elements
     if number_of_attributes < 3 {
-        return 32 * (5 + 3 + number_of_attributes as usize + 4) + 1
+        // 32 * (5 + 3 + number_of_attributes as usize + 4) + 1
+        385 + 32 * number_of_attributes as usize
+    } else {
+        // 32 * (5 + (2 * number_of_attributes as usize) + 4) + 1
+        289 + 64 * number_of_attributes as usize
     }
-    32 * (5 + (2 * number_of_attributes as usize) + 4) + 1
 }
 
 /// The `SystemParameters` define the system-wide context in which the anonymous
@@ -74,76 +77,53 @@ pub struct SystemParameters {
     pub G_a1:      RistrettoPoint,
 }
 
-macro_rules! try_deserialise {
-    ($name:expr, $bytes:expr) => {
-        match CompressedRistretto($bytes).decompress() {
-            Some(x)  => x,
-            None     => {
-                #[cfg(feature = "std")]
-                println!("Could not decode {:?} from bytes: {:?}", $name, $bytes);
+macro_rules! try_deserialize {
+    ($name:expr, $bytes:expr) => {{
+        let bytes = $bytes;
+        match CompressedRistretto::from_slice(&bytes).decompress() {
+            Some(x) => x,
+            None => {
+                #[cfg(all(debug_assertions, feature = "std", feature = "debug-errors"))]
+                eprintln!("Could not decode {:?} from bytes: {:?}", $name, bytes);
                 return Err(CredentialError::PointDecompressionError);
-            },
+            }
         }
-    }
+    }}
 }
 
 impl SystemParameters {
     pub fn from_bytes(bytes: &[u8]) -> Result<SystemParameters, CredentialError> {
-        let mut index: usize = 0;
-        let mut chunk = [0u8; 32];
-
-        let NUMBER_OF_ATTRIBUTES: u8 = bytes[0]; index += 1;
+        let NUMBER_OF_ATTRIBUTES: u8 = bytes[0];
+        let mut chunks = bytes[1..].chunks(32);
 
         if bytes.len() != sizeof_system_parameters(NUMBER_OF_ATTRIBUTES) {
             return Err(CredentialError::NoSystemParameters);
         }
 
-        chunk.copy_from_slice(&bytes[index..index+32]); index += 32;
-        let G: RistrettoPoint = try_deserialise!("G", chunk);
-
-        chunk.copy_from_slice(&bytes[index..index+32]); index += 32;
-        let G_w: RistrettoPoint = try_deserialise!("G_w", chunk);
-
-        chunk.copy_from_slice(&bytes[index..index+32]); index += 32;
-        let G_w_prime: RistrettoPoint = try_deserialise!("G_w_prime", chunk);
-
-        chunk.copy_from_slice(&bytes[index..index+32]); index += 32;
-        let G_x_0: RistrettoPoint = try_deserialise!("G_x_0", chunk);
-
-        chunk.copy_from_slice(&bytes[index..index+32]); index += 32;
-        let G_x_1: RistrettoPoint = try_deserialise!("G_x_1", chunk);
+        let G = try_deserialize!("G", &chunks.next().unwrap());
+        let G_w = try_deserialize!("G_w", &chunks.next().unwrap());
+        let G_w_prime = try_deserialize!("G_w_prime", &chunks.next().unwrap());
+        let G_x_0 = try_deserialize!("G_x_0", &chunks.next().unwrap());
+        let G_x_1 = try_deserialize!("G_x_1", &chunks.next().unwrap());
 
         let mut G_y: Vec<RistrettoPoint> = Vec::with_capacity(NUMBER_OF_ATTRIBUTES as usize);
         
-        let mut number_of_G_y = NUMBER_OF_ATTRIBUTES;
+        let number_of_G_y = core::cmp::max(3, NUMBER_OF_ATTRIBUTES);
 
-        if number_of_G_y < 3 {
-            number_of_G_y = 3;
-        }
-
-        for i in 0..number_of_G_y {
-            chunk.copy_from_slice(&bytes[index..index+32]); index += 32;
-            G_y.push(try_deserialise!(format!("G_y_{}", i), chunk));
+        for _i in 0..number_of_G_y {
+            G_y.push(try_deserialize!(format!("G_y_{}", _i), &chunks.next().unwrap()));
         }
 
         let mut G_m: Vec<RistrettoPoint> = Vec::with_capacity(NUMBER_OF_ATTRIBUTES as usize);
         
-        for i in 0..NUMBER_OF_ATTRIBUTES {
-            chunk.copy_from_slice(&bytes[index..index+32]); index += 32;
-            G_m.push(try_deserialise!(format!("G_m_{}", i), chunk));
+        for _i in 0..NUMBER_OF_ATTRIBUTES {
+            G_m.push(try_deserialize!(format!("G_m_{}", _i), &chunks.next().unwrap()));
         }
 
-        chunk.copy_from_slice(&bytes[index..index+32]); index += 32;
-        let G_V: RistrettoPoint = try_deserialise!("G_V", chunk);
-
-        chunk.copy_from_slice(&bytes[index..index+32]); index += 32;
-        let G_a: RistrettoPoint = try_deserialise!("G_a", chunk);
-
-        chunk.copy_from_slice(&bytes[index..index+32]); index += 32;
-        let G_a0: RistrettoPoint = try_deserialise!("G_a0", chunk);
-
-        chunk.copy_from_slice(&bytes[index..index+32]);
-        let G_a1: RistrettoPoint = try_deserialise!("G_a1", chunk);
+        let G_V = try_deserialize!("G_V", &chunks.next().unwrap());
+        let G_a = try_deserialize!("G_a", &chunks.next().unwrap());
+        let G_a0 = try_deserialize!("G_a0", &chunks.next().unwrap());
+        let G_a1 = try_deserialize!("G_a1", &chunks.next().unwrap());
 
         Ok(SystemParameters { NUMBER_OF_ATTRIBUTES, G, G_w, G_w_prime, G_x_0, G_x_1, G_y, G_m, G_V, G_a, G_a0, G_a1 })
     }
@@ -197,96 +177,26 @@ impl SystemParameters {
     where
         R: RngCore + CryptoRng,
     {
-        let mut tmp: [u8; 32] = [0u8; 32];
-        let mut G_w: Option<RistrettoPoint> = None;
-        let mut G_w_prime: Option<RistrettoPoint> = None;
-        let mut G_x_0: Option<RistrettoPoint> = None;
-        let mut G_x_1: Option<RistrettoPoint> = None;
+        let G_w = RistrettoPoint::random(csprng);
+        let G_w_prime = RistrettoPoint::random(csprng);
+        let G_x_0 = RistrettoPoint::random(csprng);
+        let G_x_1 = RistrettoPoint::random(csprng);
         let mut G_y: Vec<RistrettoPoint> = Vec::with_capacity(number_of_attributes as usize);
         let mut G_m: Vec<RistrettoPoint> = Vec::with_capacity(number_of_attributes as usize);
-        let mut G_V: Option<RistrettoPoint> = None;
-        let mut G_a: Option<RistrettoPoint> = None;
-        let mut G_a0: Option<RistrettoPoint> = None;
-        let mut G_a1: Option<RistrettoPoint> = None;
-
-        while G_w.is_none() {
-            csprng.fill_bytes(&mut tmp);
-            G_w = CompressedRistretto(tmp).decompress();
-        }
-
-        while G_w_prime.is_none() {
-            csprng.fill_bytes(&mut tmp);
-            G_w_prime = CompressedRistretto(tmp).decompress();
-        }
-
-        while G_x_0.is_none() {
-            csprng.fill_bytes(&mut tmp);
-            G_x_0 = CompressedRistretto(tmp).decompress();
-        }
-
-        while G_x_1.is_none() {
-            csprng.fill_bytes(&mut tmp);
-            G_x_1 = CompressedRistretto(tmp).decompress();
-        }
+        let G_V = RistrettoPoint::random(csprng);
+        let G_a = RistrettoPoint::random(csprng);
+        let G_a0 = RistrettoPoint::random(csprng);
+        let G_a1 = RistrettoPoint::random(csprng);
 
         // The number of elements in G_y must always be at least three in order
         // to support encrypted group element attributes.
-        let mut number_of_G_y: usize = number_of_attributes as usize;
+        let number_of_G_y = core::cmp::max(3, number_of_attributes as usize);
 
-        if number_of_G_y < 3 {
-            number_of_G_y = 3;
-        }
-
-        for _ in 0..number_of_G_y {
-            let mut G_y_i: Option<RistrettoPoint> = None;
-
-            while G_y_i.is_none() {
-                csprng.fill_bytes(&mut tmp);
-                G_y_i = CompressedRistretto(tmp).decompress();
-            }
-            G_y.push(G_y_i.unwrap());
-        }
-
-        for _ in 0..number_of_attributes {
-            let mut G_m_i: Option<RistrettoPoint> = None;
-
-            while G_m_i.is_none() {
-                csprng.fill_bytes(&mut tmp);
-                G_m_i = CompressedRistretto(tmp).decompress();
-            }
-            G_m.push(G_m_i.unwrap());
-        }
-
-        while G_V.is_none() {
-            csprng.fill_bytes(&mut tmp);
-            G_V = CompressedRistretto(tmp).decompress();
-        }
-
-        while G_a.is_none() {
-            csprng.fill_bytes(&mut tmp);
-            G_a = CompressedRistretto(tmp).decompress();
-        }
-
-        while G_a0.is_none() {
-            csprng.fill_bytes(&mut tmp);
-            G_a0 = CompressedRistretto(tmp).decompress();
-        }
-
-        while G_a1.is_none() {
-            csprng.fill_bytes(&mut tmp);
-            G_a1 = CompressedRistretto(tmp).decompress();
-        }
+        G_y.resize_with(number_of_G_y, || RistrettoPoint::random(csprng));
+        G_m.resize_with(number_of_attributes as usize, || RistrettoPoint::random(csprng));
 
         let NUMBER_OF_ATTRIBUTES = number_of_attributes;
         let G = RISTRETTO_BASEPOINT_POINT;
-        let G_w = G_w.unwrap();
-        let G_w_prime = G_w_prime.unwrap();
-        let G_x_0 = G_x_0.unwrap();
-        let G_x_1 = G_x_1.unwrap();
-        let G_V = G_V.unwrap();
-        let G_a = G_a.unwrap();
-        let G_a0 = G_a0.unwrap();
-        let G_a1 = G_a1.unwrap();
 
         // Safety check: all generators should be generators (i.e. not the
         // identity element) and be unique.  While the chances of this happening
@@ -312,8 +222,8 @@ impl SystemParameters {
         while generators.len() >= 2 {
             let x = generators.pop().unwrap();
 
-            for i in 0 .. generators.len()-1 {
-                if x == generators[i] {
+            for y in &generators {
+                if x == *y {
                     return Err(CredentialError::NoSystemParameters);
                 }
             }
@@ -359,7 +269,7 @@ impl IssuerParameters {
     }
 
     /// DOCDOC
-    pub fn from_bytes(bytes: &[u8]) -> Result<IssuerParameters, CredentialError> {
+    pub fn from_bytes(_bytes: &[u8]) -> Result<IssuerParameters, CredentialError> {
         unimplemented!();
     }
 

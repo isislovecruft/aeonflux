@@ -345,10 +345,10 @@ impl ProofOfEncryption {
         let proof = prover.prove_compact();
 
         ProofOfEncryption {
-            proof: proof,
+            proof,
             public_key: keypair.public,
             ciphertext: ciphertext_,
-            index: index,
+            index,
             C_y_1: C_y_1_,
             C_y_2: C_y_2_,
             C_y_3: C_y_3_,
@@ -669,10 +669,10 @@ impl ProofOfValidCredential {
         }
 
         Ok(ProofOfValidCredential {
-            proof: proof,
-            proofs_of_encryption: proofs_of_encryption,
-            encrypted_attributes: encrypted_attributes,
-            hidden_scalar_indices: hidden_scalar_indices,
+            proof,
+            proofs_of_encryption,
+            encrypted_attributes,
+            hidden_scalar_indices,
             C_x_0: C_x_0_,
             C_x_1: C_x_1_,
             C_V: C_V_,
@@ -789,7 +789,7 @@ impl ProofOfValidCredential {
             }
         }
 
-        verifier.verify_compact(&self.proof).or_else(|_| return Err(CredentialError::VerificationFailure));
+        verifier.verify_compact(&self.proof)?;
 
         // Check the proofs of correct encryptions and fail if any cannot be verified.
         for (i, proof_of_encryption) in self.proofs_of_encryption.iter() {
