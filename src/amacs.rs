@@ -280,7 +280,6 @@ impl Amac {
         }
 
         let t: Scalar = Scalar::random(csprng);
-        // XXX QUESTION are we okay with using the ristretto flavour or the elligator2 mapping here?
         let U: RistrettoPoint = RistrettoPoint::random(csprng);
         let V: RistrettoPoint = Amac::compute_V(system_parameters, secret_key, messages, &t, &U);
 
