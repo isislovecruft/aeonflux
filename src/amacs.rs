@@ -10,12 +10,12 @@
 //! Implementation of the MAC_GGM scheme in https://eprint.iacr.org/2019/1416.pdf.
 //!
 //! Algebraic Message Authentication Codes (or AMACs for short) are MACs with an
-//! algebraic polynomial structure.  They are asymmetrically keyed, meaning the
+//! algebraic polynomial structure.  They are symmetrically keyed, meaning the
 //! keypair used to create an AMAC must also be the keypair used to verify its
-//! correctness.  Due to the asymmetric setting and the algebraic structure, the
-//! polynomial coefficients of a valid AMAC may be rerandomised by another
-//! party, without requiring access to the key.  This is the underlying
-//! primitive used for our anonymous credential scheme.
+//! correctness.  Due to the symmetric setting and the algebraic structure, a
+//! proof of correctness of the AMAC can be constructed which requires sending
+//! only a vector of commitments to the AMAC.  This is the underlying primitive
+//! used for our anonymous credential scheme.
 
 #[cfg(all(not(feature = "std"), feature = "alloc"))]
 use alloc::vec::Vec;
