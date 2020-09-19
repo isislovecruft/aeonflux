@@ -75,9 +75,9 @@ impl ProofOfIssuance {
 
         let mut y: Vec<ScalarVar> = Vec::with_capacity(issuer.system_parameters.NUMBER_OF_ATTRIBUTES as usize);
 
-        for (i, y_i) in issuer.amacs_key.y.iter().enumerate() {
+        for (_i, y_i) in issuer.amacs_key.y.iter().enumerate() {
             // XXX fix the zkp crate to take Strings
-            //y.push(prover.allocate_scalar(format!("y_{}", i), y_i));
+            //y.push(prover.allocate_scalar(format!("y_{}", _i), y_i));
             y.push(prover.allocate_scalar(b"y", *y_i));
         }
 
@@ -98,9 +98,9 @@ impl ProofOfIssuance {
 
         let mut G_y: Vec<PointVar> = Vec::with_capacity(issuer.system_parameters.NUMBER_OF_ATTRIBUTES as usize);
 
-        for (i, G_y_i) in issuer.system_parameters.G_y.iter().enumerate() {
+        for (_i, G_y_i) in issuer.system_parameters.G_y.iter().enumerate() {
             // XXX fix the zkp crate to take Strings
-            //let (G_y_x, _) = prover.allocate_point(format!("G_y_{}", i), G_y_i);
+            //let (G_y_x, _) = prover.allocate_point(format!("G_y_{}", _i), G_y_i);
             let (G_y_x, _) = prover.allocate_point(b"G_y", *G_y_i);
 
             G_y.push(G_y_x);
@@ -115,9 +115,9 @@ impl ProofOfIssuance {
 
         let messages: Messages = Messages::from_attributes(&credential.attributes, &issuer.system_parameters);
 
-        for (i, M_i) in messages.0.iter().enumerate() {
+        for (_i, M_i) in messages.0.iter().enumerate() {
             // XXX fix the zkp crate to take Strings
-            //let (M_x, _) = prover.allocate_point(format!("M_{}", i), M_i);
+            //let (M_x, _) = prover.allocate_point(format!("M_{}", _i), M_i);
             let (M_x, _) = prover.allocate_point(b"M", *M_i);
 
             M.push(M_x);
@@ -172,9 +172,9 @@ impl ProofOfIssuance {
 
         let mut y: Vec<ScalarVar> = Vec::with_capacity(system_parameters.NUMBER_OF_ATTRIBUTES as usize);
 
-        for i in 0..system_parameters.NUMBER_OF_ATTRIBUTES as usize {
+        for _i in 0..system_parameters.NUMBER_OF_ATTRIBUTES as usize {
             // XXX fix the zkp crate to take Strings
-            //y.push(verifier.allocate_scalar(format!("y_{}", i)));
+            //y.push(verifier.allocate_scalar(format!("y_{}", _i)));
             y.push(verifier.allocate_scalar(b"y"));
         }
 
@@ -191,9 +191,9 @@ impl ProofOfIssuance {
 
         let mut G_y: Vec<PointVar> = Vec::with_capacity(system_parameters.NUMBER_OF_ATTRIBUTES as usize);
 
-        for (i, G_y_i) in system_parameters.G_y.iter().enumerate() {
+        for (_i, G_y_i) in system_parameters.G_y.iter().enumerate() {
             // XXX fix the zkp crate to take Strings
-            //G_y.push(verifier.allocate_point(format!("G_y_{}", i), G_y_i)?);
+            //G_y.push(verifier.allocate_point(format!("G_y_{}", _i), G_y_i)?);
             G_y.push(verifier.allocate_point(b"G_y", G_y_i.compress())?);
         }
 
@@ -206,9 +206,9 @@ impl ProofOfIssuance {
 
         let messages: Messages = Messages::from_attributes(&credential.attributes, system_parameters);
 
-        for (i, M_i) in messages.0.iter().enumerate() {
+        for (_i, M_i) in messages.0.iter().enumerate() {
             // XXX fix the zkp crate to take Strings
-            //let (M_x, _) = verifier.allocate_point(format!("M_{}", i), M_i);
+            //let (M_x, _) = verifier.allocate_point(format!("M_{}", _i), M_i);
             let M_x = verifier.allocate_point(b"M", M_i.compress())?;
 
             M.push(M_x);
@@ -561,7 +561,7 @@ impl ProofOfValidCredential {
         let mut hidden_scalar_indices: Vec<u16> = Vec::new();
         // XXX assert number of attributes is less than 2^16-1
 
-        for (i, basepoint, scalar) in H_s_.iter() {
+        for (i, _basepoint, scalar) in H_s_.iter() {
             // XXX Fix zkp crate to take Strings
             //H_s.push(prover.allocate_scalar(format!(b"H_s_{}", i), scalar));
             H_s.push((*i, prover.allocate_scalar(b"m", *scalar)));
@@ -595,9 +595,9 @@ impl ProofOfValidCredential {
             };
         }
 
-        for (i, basepoint) in system_parameters.G_y.iter().enumerate() {
+        for (_i, basepoint) in system_parameters.G_y.iter().enumerate() {
             // XXX Fix zkp crate to take Strings
-            // let (G_y_i, _) = prover.allocate_point(format!(b"G_y_{}", i), basepoint);
+            // let (G_y_i, _) = prover.allocate_point(format!(b"G_y_{}", _i), basepoint);
             let (G_y_i, _) = prover.allocate_point(b"G_y", *basepoint);
 
             G_y.push(G_y_i);
@@ -605,7 +605,7 @@ impl ProofOfValidCredential {
 
         let mut G_m = ProverHiddenScalarBasepoints(Vec::with_capacity(H_s_.len()));
 
-        for (i, basepoint, scalar) in H_s_.iter() {
+        for (i, basepoint, _scalar) in H_s_.iter() {
             // XXX Fix zkp crate to take Strings
             // let (G_m_i, _) = prover.allocate_point(format!(b"G_m_{}", i), basepoint);
             let (G_m_i, _) = prover.allocate_point(b"G_m", *basepoint);
@@ -751,9 +751,9 @@ impl ProofOfValidCredential {
             };
         }
 
-        for (i, basepoint) in issuer.system_parameters.G_y.iter().enumerate() {
+        for (_i, basepoint) in issuer.system_parameters.G_y.iter().enumerate() {
             // XXX Fix zkp crate to take Strings
-            // G_y.push(verifier.allocate_point(format!(b"G_y_{}", i), basepoint.compress())?);
+            // G_y.push(verifier.allocate_point(format!(b"G_y_{}", _i), basepoint.compress())?);
             G_y.push(verifier.allocate_point(b"G_y", basepoint.compress())?);
         }
 
@@ -789,7 +789,7 @@ impl ProofOfValidCredential {
         verifier.verify_compact(&self.proof).or_else(|_| return Err(CredentialError::VerificationFailure));
 
         // Check the proofs of correct encryptions and fail if any cannot be verified.
-        for (i, proof_of_encryption) in self.proofs_of_encryption.iter() {
+        for (_i, proof_of_encryption) in self.proofs_of_encryption.iter() {
             proof_of_encryption.verify(&issuer.system_parameters)?;
         }
 
