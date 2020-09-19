@@ -56,7 +56,7 @@ pub struct ProofOfIssuance(CompactProof);
 /// correctly w.r.t. the pubilshed system and issuer parameters.
 impl ProofOfIssuance {
     /// Create a [`ProofOfIssuance`].
-    pub fn prove(
+    pub(crate) fn prove(
         issuer: &Issuer,
         credential: &AnonymousCredential,
     ) -> ProofOfIssuance
@@ -270,7 +270,7 @@ impl ProofOfEncryption {
     /// # Returns
     ///
     /// A `Result` whose `Ok` value is empty, otherwise a [`CredentialError`].
-    pub fn prove(
+    pub(crate) fn prove(
         system_parameters: &SystemParameters,
         plaintext: &Plaintext,
         index: u16,
@@ -362,13 +362,11 @@ impl ProofOfEncryption {
     /// # Inputs
     ///
     /// * The [`SystemParameters`] for this anonymous credential instantiation,
-    /// * The [`Ciphertext`] in question,
-    /// * The "public key" for the symmetric verifiable encryption scheme.
     ///
     /// # Returns
     ///
     /// A `Result` whose `Ok` value is empty, otherwise a [`CredentialError`].
-    pub fn verify(
+    pub(crate) fn verify(
         &self,
         system_parameters: &SystemParameters,
     ) -> Result<(), CredentialError>
@@ -505,8 +503,8 @@ pub struct ProofOfValidCredential {
 }
 
 impl ProofOfValidCredential {
-    /// Create a [`ProofOfValidCredential`]
-    pub fn prove<C>(
+    /// Create a [`ProofOfValidCredential`].
+    pub(crate) fn prove<C>(
         system_parameters: &SystemParameters,
         issuer_parameters: &IssuerParameters,
         credential: &AnonymousCredential,
@@ -680,11 +678,10 @@ impl ProofOfValidCredential {
         })
     }
 
-    /// DOCDOC
-    pub fn verify(
+    /// Verify a `ProofOfValidCredential`.
+    pub(crate) fn verify(
         &self,
         issuer: &Issuer,
-        credential: &AnonymousCredential,
     ) -> Result<(), CredentialError>
     {
         let NUMBER_OF_ATTRIBUTES = issuer.system_parameters.NUMBER_OF_ATTRIBUTES as usize;
@@ -744,8 +741,8 @@ impl ProofOfValidCredential {
         // attributes and all revealed attributes; for hidden group element
         // attributes we use proofs of encryption.
         for (i, commitment) in self.C_y.iter().enumerate() {
-            match credential.attributes[i] {
-                Attribute::SecretPoint { .. } => continue,
+            match self.encrypted_attributes[i] {
+                EncryptedAttribute::SecretPoint { .. } => continue,
                 _ => {
                     // XXX Fix zkp crate to take Strings
                     // C_y.push(verifier.allocate_point(format!(b"C_y_{}", i), commitment.compress())?);
@@ -782,10 +779,10 @@ impl ProofOfValidCredential {
         //        C_y_i = { G_y_i * z + G_m_i * m_i          if i is a hidden scalar attribute
         //                { G_y_i * z                        if i is a revealed attribute
         for (i, C_y_i) in C_y.iter().enumerate() {
-            match credential.attributes[i] {
-                Attribute::SecretPoint(_)  => continue,
-                Attribute::SecretScalar(_) => verifier.constrain(*C_y_i, vec![(z, G_y[i]), (H_s[i], G_m[i])]),
-                _                          => verifier.constrain(*C_y_i, vec![(z, G_y[i])]),
+            match self.encrypted_attributes[i] {
+                EncryptedAttribute::SecretPoint  => continue,
+                EncryptedAttribute::SecretScalar => verifier.constrain(*C_y_i, vec![(z, G_y[i]), (H_s[i], G_m[i])]),
+                _                                => verifier.constrain(*C_y_i, vec![(z, G_y[i])]),
             }
         }
 
@@ -822,8 +819,7 @@ mod test {
         attributes.push(Attribute::SecretPoint(plaintext));
         attributes.push(Attribute::SecretScalar(Scalar::random(&mut rng)));
 
-        let credential = issuer.issue(attributes, &mut rng).unwrap();
-        let proof = ProofOfIssuance::prove(&issuer, &credential);
+        let (credential, proof) = issuer.issue(attributes, &mut rng).unwrap();
         let verification = proof.verify(&system_parameters, &issuer.issuer_parameters, &credential);
 
         assert!(verification.is_ok());
@@ -847,8 +843,7 @@ mod test {
         attributes.push(Attribute::SecretPoint(plaintext));
         attributes.push(Attribute::SecretScalar(Scalar::random(&mut rng)));
 
-        let credential = issuer.issue(attributes, &mut rng).unwrap();
-        let proof = ProofOfIssuance::prove(&issuer, &credential);
+        let (credential, proof) = issuer.issue(attributes, &mut rng).unwrap();
         let verification = proof.verify(&system_parameters, &issuer.issuer_parameters, &credential);
 
         assert!(verification.is_ok());
@@ -897,13 +892,13 @@ mod test {
         attributes.push(Attribute::PublicScalar(Scalar::random(&mut rng)));
         attributes.push(Attribute::PublicPoint(RistrettoPoint::random(&mut rng)));
 
-        let credential = issuer.issue(attributes, &mut rng).unwrap();
+        let (credential, _) = issuer.issue(attributes, &mut rng).unwrap();
         let (keypair, master_secret) = SymmetricKeypair::generate(&system_parameters, &mut rng);
         let proof = ProofOfValidCredential::prove(&system_parameters, &issuer.issuer_parameters, &credential, Some(&keypair), &mut rng);
 
         assert!(proof.is_ok());
 
-        let verification = proof.unwrap().verify(&issuer, &credential);
+        let verification = proof.unwrap().verify(&issuer);
 
         assert!(verification.is_ok());
     }
@@ -919,13 +914,13 @@ mod test {
 
         attributes.push(Attribute::SecretPoint(plaintext));
 
-        let credential = issuer.issue(attributes, &mut rng).unwrap();
+        let (credential, _) = issuer.issue(attributes, &mut rng).unwrap();
         let (keypair, _) = SymmetricKeypair::generate(&system_parameters, &mut rng);
         let proof = ProofOfValidCredential::prove(&system_parameters, &issuer.issuer_parameters, &credential, Some(&keypair), &mut rng);
 
         assert!(proof.is_ok());
 
-        let verification = proof.unwrap().verify(&issuer, &credential);
+        let verification = proof.unwrap().verify(&issuer);
 
         assert!(verification.is_ok());
     }

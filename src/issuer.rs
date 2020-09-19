@@ -88,14 +88,38 @@ impl Issuer {
         &self,
         attributes: Vec<Attribute>,
         csprng: &mut C,
-    ) -> Result<AnonymousCredential, CredentialError>
+    ) -> Result<(AnonymousCredential, ProofOfIssuance), CredentialError>
     where
         C: CryptoRng + RngCore,
     {
-        match Amac::tag(csprng, &self.system_parameters, &self.amacs_key, &attributes) {
-            Ok(amac) => Ok(AnonymousCredential { amac, attributes }),
-            Err(x) => Err(x.into()),
-        }
+        let amac = Amac::tag(csprng, &self.system_parameters, &self.amacs_key, &attributes)?;
+        let cred = AnonymousCredential { amac, attributes };
+        let proof = ProofOfIssuance::prove(&self, &cred);
+
+        Ok((cred, proof))
+    }
+
+    /// Verify a user's presentation of an anonymous credential.
+    ///
+    /// The user's presentation may reveal or hide any of the attributes, so
+    /// long as the overall structure remains the same (e.g. a user cannot
+    /// reorder a credential with attributes being a scalar then a group element
+    /// to be instead a group element and then a scalar, nor can they add or
+    /// remove attributes).
+    ///
+    /// # Inputs
+    ///
+    /// * A user's [`ProofOfValidCredential`].
+    ///
+    /// # Returns
+    ///
+    /// A `Result` whose `Ok` value is empty, otherwise a `CredentialError`.
+    pub fn verify(
+        &self,
+        presentation: &ProofOfValidCredential,
+    ) -> Result<(), CredentialError>
+    {
+        presentation.verify(&self)
     }
 }
 

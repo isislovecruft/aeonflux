@@ -84,7 +84,9 @@ attributes.push(Attribute::SecretScalar(Scalar::random(&mut rng)));
 attributes.push(Attribute::PublicScalar(Scalar::random(&mut rng)));
 attributes.push(Attribute::PublicPoint(RistrettoPoint::random(&mut rng)));
 
-let credential = issuer.issue(attributes, &mut rng).unwrap();
+let (credential, issuance_proof) = issuer.issue(attributes, &mut rng).unwrap();
+
+assert!(issuance_proof.verify().is_ok());
 
 // Optionally, upon showing the credential, the user can create a
 // keypair and encrypt some or all of the attributes.  The master secret
@@ -95,7 +97,7 @@ let proof = credential.show(&system_parameters, &issuer.issuer_parameters, Some(
 
 assert!(proof.is_ok());
 
-let verification = proof.unwrap().verify(&issuer, &credential);
+let verification = proof.unwrap().verify(&issuer);
 
 assert!(verification.is_ok());
 ```

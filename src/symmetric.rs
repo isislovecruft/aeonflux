@@ -142,6 +142,13 @@ impl PartialEq for Plaintext {
 
 impl Eq for Plaintext {}
 
+/// A symmetrically encrypted verifiable ciphertext, corresponding to one unique
+/// [`Plaintext`] and [`Keypair`].
+pub struct Ciphertext {
+    pub(crate) E1: RistrettoPoint,
+    pub(crate) E2: RistrettoPoint,
+}
+
 impl Keypair {
     /// Derive this [`Keypair`] from a master secret.
     ///
@@ -230,12 +237,6 @@ impl Keypair {
             false => Err(CredentialError::UndecryptableAttribute),
         }
     }
-}
-
-/// DOCDOC
-pub struct Ciphertext {
-    pub E1: RistrettoPoint,
-    pub E2: RistrettoPoint,
 }
 
 #[cfg(test)]
