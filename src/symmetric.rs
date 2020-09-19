@@ -206,7 +206,15 @@ impl Keypair {
         (keypair, master_secret)
     }
 
-    /// DOCDOC
+    /// Use this key to encrypt a plaintext.
+    ///
+    /// # Inputs
+    ///
+    /// * The [`Plaintext`] to encrypt.
+    ///
+    /// # Returns
+    ///
+    /// The corresponding, unique ciphertext.
     pub fn encrypt(
         &self,
         plaintext: &Plaintext,
@@ -218,8 +226,16 @@ impl Keypair {
         Ciphertext { E1, E2 }
     }
 
-    /// DOCDOC
-    // TODO return the counter
+    /// Use this key to decrypt a ciphertext.
+    ///
+    /// # Inputs
+    ///
+    /// * The [`Ciphertext`] to be decrypted.
+    ///
+    /// # Returns
+    ///
+    /// A `Result` whose `Ok` value is the [`Plaintext`], otherwise a [`CredentialError`].
+    // XXX TODO return the counter
     pub fn decrypt(
         &self,
         ciphertext: &Ciphertext,
