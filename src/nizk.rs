@@ -90,7 +90,6 @@ impl ProofOfIssuance {
 
         // Commit to the values and names of the Camenisch-Stadler publics.
         let (neg_G_V, _)   = prover.allocate_point(b"-G_V",     -issuer.system_parameters.G_V);
-        let (G, _)         = prover.allocate_point(b"G",         issuer.system_parameters.G);
         let (G_w, _)       = prover.allocate_point(b"G_w",       issuer.system_parameters.G_w);
         let (G_w_prime, _) = prover.allocate_point(b"G_w_prime", issuer.system_parameters.G_w_prime);
         let (G_x_0, _)     = prover.allocate_point(b"G_x_0",     issuer.system_parameters.G_x_0);
@@ -183,7 +182,6 @@ impl ProofOfIssuance {
 
         // Commit to the values and names of the Camenisch-Stadler publics.
         let neg_G_V   = verifier.allocate_point(b"-G_V",    (-system_parameters.G_V).compress())?;
-        let G         = verifier.allocate_point(b"G",         system_parameters.G.compress())?;
         let G_w       = verifier.allocate_point(b"G_w",       system_parameters.G_w.compress())?;
         let G_w_prime = verifier.allocate_point(b"G_w_prime", system_parameters.G_w_prime.compress())?;
         let G_x_0     = verifier.allocate_point(b"G_x_0",     system_parameters.G_x_0.compress())?;
