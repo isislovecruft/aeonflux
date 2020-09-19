@@ -22,6 +22,7 @@ use alloc::vec::Vec;
 #[cfg(all(not(feature = "alloc"), feature = "std"))]
 use std::vec::Vec;
 
+use curve25519_dalek::ristretto::CompressedRistretto;
 use curve25519_dalek::ristretto::RistrettoPoint;
 use curve25519_dalek::scalar::Scalar;
 use curve25519_dalek::traits::Identity;
@@ -105,14 +106,49 @@ impl SecretKey {
         SecretKey { w, w_prime, x_0, x_1, y, W }
     }
 
-    /// DOCDOC
-    pub(crate) fn from_bytes(bytes: &[u8]) -> Result<SecretKey, MacError> {
-        unimplemented!()
+    /// Serialise this AMAC secret key to a vector of bytes.
+    pub(crate) fn to_bytes(&self) -> Vec<u8> {
+        let mut bytes: Vec<u8> = Vec::with_capacity(sizeof_secret_key(self.y.len() as u8) + 1);
+
+        bytes.push(self.y.len() as u8);
+        bytes.extend(self.w.as_bytes());
+        bytes.extend(self.w_prime.as_bytes());
+        bytes.extend(self.x_0.as_bytes());
+        bytes.extend(self.x_1.as_bytes());
+
+        for y in self.y.iter() {
+            bytes.extend(y.as_bytes());
+        }
+
+        bytes.extend(self.W.compress().as_bytes());
+        bytes
     }
 
-    /// DOCDOC
-    pub(crate) fn to_bytes(&self) -> Vec<u8> {
-        unimplemented!()
+    /// Attempt to deserialise this AMAC secret key from bytes.
+    pub(crate) fn from_bytes(bytes: &[u8]) -> Result<SecretKey, MacError> {
+        // We assume no one is going to create a key for less that one attributes.
+        if bytes.len() < sizeof_secret_key(1u8) + 1 {
+            return Err(MacError::KeypairDeserialisation);
+        }
+
+        let mut index: usize = 0;
+        let mut chunk: [u8; 32] = [0u8; 32];
+
+        let number_of_attributes = bytes[index]; index += 1; chunk.copy_from_slice(&bytes[index..index+32]);
+        let w       = Scalar::from_canonical_bytes(chunk)?; index += 32; chunk.copy_from_slice(&bytes[index..index+32]);
+        let w_prime = Scalar::from_canonical_bytes(chunk)?; index += 32; chunk.copy_from_slice(&bytes[index..index+32]);
+        let x_0     = Scalar::from_canonical_bytes(chunk)?; index += 32; chunk.copy_from_slice(&bytes[index..index+32]);
+        let x_1     = Scalar::from_canonical_bytes(chunk)?; index += 32; chunk.copy_from_slice(&bytes[index..index+32]);
+
+        let mut y: Vec<Scalar> = Vec::with_capacity(number_of_attributes as usize);
+
+        for _ in 0..number_of_attributes {
+            y.push(Scalar::from_canonical_bytes(chunk)?); index += 32;
+        }
+
+        let W = CompressedRistretto::from_slice(&bytes[index..index+32]).decompress()?;
+
+        Ok(SecretKey{ w, w_prime, x_0, x_1, y, W })
     }
 }
 
