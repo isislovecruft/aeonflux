@@ -292,10 +292,13 @@ impl Amac {
         system_parameters: &SystemParameters,
         secret_key: &SecretKey,
         messages: &Vec<Attribute>,
-    ) -> bool {
+    ) -> Result<(), MacError> {
         let V_prime = Amac::compute_V(system_parameters, secret_key, messages, &self.t, &self.U);
 
-        self.V == V_prime
+        if self.V == V_prime {
+            return Ok(());
+        }
+        Err(MacError::AuthenticationError)
     }
 }
 
@@ -336,6 +339,6 @@ mod test {
 
         let amac = Amac::tag(&mut rng, &params, &sk, &messages).unwrap();
 
-        assert!(amac.verify(&params, &sk, &messages));
+        assert!(amac.verify(&params, &sk, &messages).is_ok());
     }
 }
