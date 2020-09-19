@@ -60,18 +60,19 @@ pub(crate) fn sizeof_system_parameters(number_of_attributes: u8) -> usize {
 /// \\( (G_a, G_a0, G_a1) \in \mathbb{G} \\), chosen as detailed above.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct SystemParameters {
+    /// The number of credential attributes these system parameters support.
     pub NUMBER_OF_ATTRIBUTES: u8,
-    pub G:         RistrettoPoint,
-    pub G_w:       RistrettoPoint,
-    pub G_w_prime: RistrettoPoint,
-    pub G_x_0:     RistrettoPoint,
-    pub G_x_1:     RistrettoPoint,
-    pub G_y:       Vec<RistrettoPoint>,
-    pub G_m:       Vec<RistrettoPoint>,
-    pub G_V:       RistrettoPoint,
-    pub G_a:       RistrettoPoint,
-    pub G_a0:      RistrettoPoint,
-    pub G_a1:      RistrettoPoint,
+    pub(crate) G:         RistrettoPoint,
+    pub(crate) G_w:       RistrettoPoint,
+    pub(crate) G_w_prime: RistrettoPoint,
+    pub(crate) G_x_0:     RistrettoPoint,
+    pub(crate) G_x_1:     RistrettoPoint,
+    pub(crate) G_y:       Vec<RistrettoPoint>,
+    pub(crate) G_m:       Vec<RistrettoPoint>,
+    pub(crate) G_V:       RistrettoPoint,
+    pub(crate) G_a:       RistrettoPoint,
+    pub(crate) G_a0:      RistrettoPoint,
+    pub(crate) G_a1:      RistrettoPoint,
 }
 
 macro_rules! try_deserialise {

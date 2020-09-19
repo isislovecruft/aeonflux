@@ -214,7 +214,7 @@ pub enum EncryptedAttribute {
 
 /// Messages are computed from `Attribute`s by scalar multiplying the scalar
 /// portions by their respective generator in `SystemParameters.G_m`.
-pub struct Messages(pub(crate) Vec<RistrettoPoint>);
+pub(crate) struct Messages(pub(crate) Vec<RistrettoPoint>);
 
 impl Messages {
     pub(crate) fn from_attributes(
