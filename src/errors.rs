@@ -37,7 +37,6 @@ use zkp::ProofError;
 pub(crate) enum MacError {
     KeypairDeserialisation,
     PointDecompressionError,
-    ScalarFormatError,
     /// An error in the length of bytes handed to a constructor.
     ///
     /// To use this, pass the `length` in bytes which its constructor expects.
@@ -53,8 +52,6 @@ impl Display for MacError {
                 => write!(f, "Cannot deserialise keypair"),
             MacError::PointDecompressionError
                 => write!(f, "Cannot decompress Ristretto point"),
-            MacError::ScalarFormatError
-                => write!(f, "Cannot use scalar with high-bit set"),
             MacError::MessageLengthError{ length: l }
                 => write!(f, "Messages can only have up to {} attributes", l),
             MacError::AuthenticationError
@@ -141,8 +138,6 @@ impl From<MacError> for CredentialError {
                 => CredentialError::NoIssuerKey,
             MacError::PointDecompressionError
                 => CredentialError::NoIssuerParameters,
-            MacError::ScalarFormatError
-                => CredentialError::ScalarFormatError,
             MacError::MessageLengthError{ length: _ }
                 => CredentialError::MacCreation,
             MacError::AuthenticationError
