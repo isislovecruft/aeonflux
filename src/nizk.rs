@@ -797,7 +797,12 @@ impl ProofOfValidCredential {
 
 #[cfg(test)]
 mod test {
+    use std::string::String;
+    use std::vec::Vec;
+
     use super::*;
+
+    use crate::user::CredentialRequestConstructor;
 
     use curve25519_dalek::traits::IsIdentity;
 
@@ -806,45 +811,48 @@ mod test {
     #[test]
     fn issuance_proof() {
         let mut rng = thread_rng();
-        let system_parameters = SystemParameters::generate(&mut rng, 5).unwrap();
+        let system_parameters = SystemParameters::generate(&mut rng, 7).unwrap();
         let issuer = Issuer::new(&system_parameters, &mut rng);
-        let plaintext: Plaintext = (&[1u8; 30]).into();
+        let message: Vec<u8> = vec![1u8];
+        let mut request = CredentialRequestConstructor::new(&system_parameters);
 
-        let mut attributes = Vec::new();
-        attributes.push(Attribute::SecretScalar(Scalar::random(&mut rng)));
-        attributes.push(Attribute::PublicScalar(Scalar::random(&mut rng)));
-        attributes.push(Attribute::PublicPoint(RistrettoPoint::random(&mut rng)));
-        attributes.push(Attribute::SecretPoint(plaintext));
-        attributes.push(Attribute::SecretScalar(Scalar::random(&mut rng)));
+        request.append_revealed_scalar(Scalar::random(&mut rng));
+        request.append_revealed_scalar(Scalar::random(&mut rng));
+        request.append_revealed_point(RistrettoPoint::random(&mut rng));
+        let _plaintext = request.append_plaintext(&message);
+        request.append_revealed_scalar(Scalar::random(&mut rng));
 
-        let (credential, proof) = issuer.issue(attributes, &mut rng).unwrap();
-        let verification = proof.verify(&system_parameters, &issuer.issuer_parameters, &credential);
+        let credential_request = request.finish();
+        let issuance = issuer.issue(credential_request, &mut rng).unwrap();
+        let credential = issuance.verify(&system_parameters, &issuer.issuer_parameters);
 
-        assert!(verification.is_ok());
+        assert!(credential.is_ok());
     }
 
     /// An issuance proof with a plaintext equal to the identity element will fail.
     #[test]
-    #[should_panic(expected = "assertion failed: verification.is_ok()")]
+    #[should_panic(expected = "assertion failed: credential.is_ok()")]
     fn issuance_proof_identity_plaintext() {
         let mut rng = thread_rng();
-        let system_parameters = SystemParameters::generate(&mut rng, 5).unwrap();
+        let system_parameters = SystemParameters::generate(&mut rng, 8).unwrap();
         let issuer = Issuer::new(&system_parameters, &mut rng);
-        let plaintext: Plaintext = (&[0u8; 30]).into();
+        let message: Vec<u8> = vec![0u8; 30];
+        let mut request = CredentialRequestConstructor::new(&system_parameters);
+        let plaintext = request.append_plaintext(&message);
 
-        assert!(plaintext.M1.is_identity());
+        assert!(plaintext[0].M1.is_identity());
 
-        let mut attributes = Vec::new();
-        attributes.push(Attribute::SecretScalar(Scalar::random(&mut rng)));
-        attributes.push(Attribute::PublicScalar(Scalar::random(&mut rng)));
-        attributes.push(Attribute::PublicPoint(RistrettoPoint::random(&mut rng)));
-        attributes.push(Attribute::SecretPoint(plaintext));
-        attributes.push(Attribute::SecretScalar(Scalar::random(&mut rng)));
+        request.append_revealed_scalar(Scalar::random(&mut rng));
+        request.append_revealed_scalar(Scalar::random(&mut rng));
+        request.append_revealed_point(RistrettoPoint::random(&mut rng));
+        request.append_revealed_point(RistrettoPoint::random(&mut rng));
+        request.append_revealed_scalar(Scalar::random(&mut rng));
 
-        let (credential, proof) = issuer.issue(attributes, &mut rng).unwrap();
-        let verification = proof.verify(&system_parameters, &issuer.issuer_parameters, &credential);
+        let credential_request = request.finish();
+        let issuance = issuer.issue(credential_request, &mut rng).unwrap();
+        let credential = issuance.verify(&system_parameters, &issuer.issuer_parameters);
 
-        assert!(verification.is_ok());
+        assert!(credential.is_ok());
     }
 
     #[test]
@@ -873,46 +881,26 @@ mod test {
     }
 
     #[test]
-    fn credential_proof_8_attributes() {
+    fn credential_proof_10_attributes() {
         let mut rng = thread_rng();
-        let system_parameters = SystemParameters::generate(&mut rng, 8).unwrap();
+        let system_parameters = SystemParameters::generate(&mut rng, 10).unwrap();
         let issuer = Issuer::new(&system_parameters, &mut rng);
-        let plaintext: Plaintext = b"This is a tsunami alert test..".into();
+        let mut request = CredentialRequestConstructor::new(&system_parameters);
+        let message = String::from("This is a tsunami alert test..").into_bytes();
+        // Each plaintext takes up three attributes;
+        let plaintext = request.append_plaintext(&message);
 
-        let mut attributes = Vec::new();
+        request.append_revealed_scalar(Scalar::random(&mut rng));
+        request.append_revealed_scalar(Scalar::random(&mut rng));
+        request.append_revealed_scalar(Scalar::random(&mut rng));
+        request.append_revealed_point(RistrettoPoint::random(&mut rng));
+        request.append_revealed_scalar(Scalar::random(&mut rng));
+        request.append_revealed_scalar(Scalar::random(&mut rng));
+        request.append_revealed_point(RistrettoPoint::random(&mut rng));
 
-        attributes.push(Attribute::SecretPoint(plaintext));
-        attributes.push(Attribute::SecretScalar(Scalar::random(&mut rng)));
-        attributes.push(Attribute::SecretScalar(Scalar::random(&mut rng)));
-        attributes.push(Attribute::PublicScalar(Scalar::random(&mut rng)));
-        attributes.push(Attribute::PublicPoint(RistrettoPoint::random(&mut rng)));
-        attributes.push(Attribute::SecretScalar(Scalar::random(&mut rng)));
-        attributes.push(Attribute::PublicScalar(Scalar::random(&mut rng)));
-        attributes.push(Attribute::PublicPoint(RistrettoPoint::random(&mut rng)));
-
-        let (credential, _) = issuer.issue(attributes, &mut rng).unwrap();
-        let (keypair, master_secret) = SymmetricKeypair::generate(&system_parameters, &mut rng);
-        let proof = ProofOfValidCredential::prove(&system_parameters, &issuer.issuer_parameters, &credential, Some(&keypair), &mut rng);
-
-        assert!(proof.is_ok());
-
-        let verification = proof.unwrap().verify(&issuer);
-
-        assert!(verification.is_ok());
-    }
-
-    #[test]
-    fn credential_proof_1_attribute() {
-        let mut rng = thread_rng();
-        let system_parameters = SystemParameters::generate(&mut rng, 1).unwrap();
-        let issuer = Issuer::new(&system_parameters, &mut rng);
-        let plaintext: Plaintext = b"This is a tsunami alert test..".into();
-
-        let mut attributes = Vec::new();
-
-        attributes.push(Attribute::SecretPoint(plaintext));
-
-        let (credential, _) = issuer.issue(attributes, &mut rng).unwrap();
+        let credential_request = request.finish();
+        let issuance = issuer.issue(credential_request, &mut rng).unwrap();
+        let credential = issuance.verify(&system_parameters, &issuer.issuer_parameters).unwrap();
         let (keypair, _) = SymmetricKeypair::generate(&system_parameters, &mut rng);
         let proof = ProofOfValidCredential::prove(&system_parameters, &issuer.issuer_parameters, &credential, Some(&keypair), &mut rng);
 
@@ -923,4 +911,64 @@ mod test {
         assert!(verification.is_ok());
     }
 
+    #[test]
+    fn credential_proof_1_plaintext() {
+        let mut rng = thread_rng();
+        let system_parameters = SystemParameters::generate(&mut rng, 3).unwrap();
+        let issuer = Issuer::new(&system_parameters, &mut rng);
+        let mut request = CredentialRequestConstructor::new(&system_parameters);
+        let message = String::from("This is a tsunami alert test..").into_bytes();
+        let _plaintext = request.append_plaintext(&message);
+        let credential_request = request.finish();
+        let issuance = issuer.issue(credential_request, &mut rng).unwrap();
+        let credential = issuance.verify(&system_parameters, &issuer.issuer_parameters).unwrap();
+        let (keypair, _) = SymmetricKeypair::generate(&system_parameters, &mut rng);
+        let proof = ProofOfValidCredential::prove(&system_parameters, &issuer.issuer_parameters, &credential, Some(&keypair), &mut rng);
+
+        assert!(proof.is_ok());
+
+        let verification = proof.unwrap().verify(&issuer);
+
+        assert!(verification.is_ok());
+    }
+
+    #[test]
+    fn credential_proof_1_scalar_revealed() {
+        let mut rng = thread_rng();
+        let system_parameters = SystemParameters::generate(&mut rng, 1).unwrap();
+        let issuer = Issuer::new(&system_parameters, &mut rng);
+        let mut request = CredentialRequestConstructor::new(&system_parameters);
+
+        request.append_revealed_scalar(Scalar::random(&mut rng));
+
+        let credential_request = request.finish();
+        let issuance = issuer.issue(credential_request, &mut rng).unwrap();
+        let credential = issuance.verify(&system_parameters, &issuer.issuer_parameters).unwrap();
+        let presentation = ProofOfValidCredential::prove(&system_parameters, &issuer.issuer_parameters, &credential, None, &mut rng).unwrap();
+        let verification = issuer.verify(&presentation);
+
+        assert!(verification.is_ok());
+    }
+
+    #[test]
+    #[should_panic(expected = "assertion failed: verification.is_ok()")]
+    fn bad_credential_proof_1_scalar_revealed() {
+        let mut rng = thread_rng();
+        let system_parameters = SystemParameters::generate(&mut rng, 1).unwrap();
+        let issuer = Issuer::new(&system_parameters, &mut rng);
+        let mut request = CredentialRequestConstructor::new(&system_parameters);
+
+        request.append_revealed_scalar(Scalar::random(&mut rng));
+
+        let credential_request = request.finish();
+        let issuance = issuer.issue(credential_request, &mut rng).unwrap();
+        let mut credential = issuance.verify(&system_parameters, &issuer.issuer_parameters).unwrap();
+
+        credential.attributes[0] = Attribute::PublicScalar(Scalar::random(&mut rng));
+
+        let presentation = ProofOfValidCredential::prove(&system_parameters, &issuer.issuer_parameters, &credential, None, &mut rng).unwrap();
+        let verification = issuer.verify(&presentation);
+
+        assert!(verification.is_ok());
+    }
 }

@@ -22,6 +22,11 @@
 //! * is correct under adversarially chosen keys, meaning that it is hard to
 //!   find a key and a message that cause decryption to fail.
 
+#[cfg(all(not(feature = "std"), feature = "alloc"))]
+use alloc::vec::Vec;
+#[cfg(all(not(feature = "alloc"), feature = "std"))]
+use std::vec::Vec;
+
 use curve25519_dalek::ristretto::RistrettoPoint;
 use curve25519_dalek::scalar::Scalar;
 use curve25519_dalek::traits::Identity;
@@ -109,6 +114,24 @@ impl Drop for Plaintext {
     }
 }
 
+impl Plaintext {
+    pub(crate) fn from_slice(slice: &[u8]) -> Vec<Plaintext> {
+        let mut plaintexts: Vec<Plaintext> = Vec::new();
+
+        for chunk in slice.chunks(30) {
+            let mut bytes = [0u8; 30];
+
+            for i in 0..chunk.len() {
+                bytes[i] = chunk[i];
+            }
+
+            plaintexts.push(Plaintext::from(&bytes));
+        }
+
+        plaintexts
+    }
+}
+
 impl From<&[u8; 30]> for Plaintext {
     fn from(source: &[u8; 30]) -> Plaintext {
         let (M1, _) = encode_to_group(source);
@@ -123,6 +146,17 @@ impl From<&[u8; 30]> for Plaintext {
 impl From<&Plaintext> for [u8; 30] {
     fn from(source: &Plaintext) -> [u8; 30] {
         decode_from_group(&source.M1).0
+    }
+}
+
+impl From<&RistrettoPoint> for Plaintext {
+    fn from(source: &RistrettoPoint) -> Plaintext {
+        let compressed = source.compress();
+
+        let M2 = RistrettoPoint::hash_from_bytes::<Sha512>(compressed.as_bytes());
+        let m3 = Scalar::hash_from_bytes::<Sha512>(compressed.as_bytes());
+
+        Plaintext { M1: source.clone(), M2, m3 }
     }
 }
 
@@ -265,7 +299,7 @@ mod test {
     fn encrypt_decrypt_roundtrip() {
         let mut csprng = thread_rng();
         let system_parameters = SystemParameters::hash_and_pray(&mut csprng, 2).unwrap();
-        let (keypair, master_secret) = Keypair::generate(&system_parameters, &mut csprng);
+        let (keypair, _) = Keypair::generate(&system_parameters, &mut csprng);
         let message = [0u8; 30];
         let plaintext: Plaintext = (&message).into();
         let ciphertext = keypair.encrypt(&plaintext);

@@ -8,9 +8,13 @@
 // Authors:
 // - isis agora lovecruft <isis@patternsinthevoid.net>
 
-// XXX
+//! Use this module to import commonly used structs automatically.
 
-//pub use amacs::{self};
-//pub use elgamal::{self};
-//pub use issuer::IssuerParameters;
-//pub use parameters::SystemParameters;
+pub use curve25519_dalek::ristretto::RistrettoPoint;
+pub use curve25519_dalek::scalar::Scalar;
+
+pub use crate::amacs::Attribute;
+pub use crate::issuer::Issuer;
+pub use crate::parameters::SystemParameters;
+pub use crate::symmetric::Plaintext;
+pub use crate::symmetric::Keypair;

@@ -57,4 +57,4 @@ pub mod nizk;
 pub mod parameters;
 pub mod prelude;
 pub mod symmetric;
-//pub mod user;
+pub mod user;
