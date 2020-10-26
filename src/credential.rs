@@ -33,16 +33,64 @@ pub struct AnonymousCredential {
 
 impl AnonymousCredential {
     /// Present this credential to an issuer.
-    pub fn show<C>(
+    pub fn show(
         &self,
         system_parameters: &SystemParameters,
         issuer_parameters: &IssuerParameters,
         keypair: Option<&SymmetricKeypair>,
-        csprng: &mut C,
+        mut csprng: impl CryptoRng + RngCore,
     ) -> Result<ProofOfValidCredential, CredentialError>
-    where
-        C: CryptoRng + RngCore,
     {
-        ProofOfValidCredential::prove(&system_parameters, &issuer_parameters, &self, keypair, csprng)
+        ProofOfValidCredential::prove(&system_parameters, &issuer_parameters, &self, keypair, &mut csprng)
+    }
+
+    /// Change one of this credential's attributes to be revealed upon presentation.
+    ///
+    /// # Returns
+    ///
+    /// A `Result` whose `Ok` value is an empty tuple, or a string describing the error.
+    pub fn reveal_attribute(
+        &mut self,
+        index: usize,
+    ) -> Result<(), &'static str>
+    {
+        let attribute = match self.attributes.get(index) {
+            Some(x) => x,
+            None => return Err("Could not find attribute"),
+        };
+
+        match attribute {
+            Attribute::SecretScalar(x) => self.attributes[index] = Attribute::PublicScalar(*x),
+            Attribute::SecretPoint(x)  => self.attributes[index] = Attribute::PublicPoint(x.M1),
+            _ => return Ok(()),
+        }
+
+        Ok(())
+    }
+
+    /// Change one of this credential's attributes to be hidden upon presentation.
+    ///
+    /// # Returns
+    ///
+    /// A `Result` whose `Ok` value is an empty tuple, or a string describing the error.
+    pub fn hide_attribute(
+        &mut self,
+        index: usize,
+    ) -> Result<(), &'static str>
+    {
+        let attribute = match self.attributes.get(index) {
+            Some(x) => x,
+            None => return Err("Could not find attribute"),
+        };
+
+        match attribute {
+            Attribute::PublicScalar(x) => self.attributes[index] = Attribute::SecretScalar(*x),
+            Attribute::PublicPoint(_)  => return Err("Public point attributes cannot be converted \
+                                                     to secret point attributes because this changes \
+                                                     the number of attributes on the credential."),
+            _ => return Ok(()),
+        }
+
+        Ok(())
     }
 }
