@@ -85,6 +85,7 @@ impl AnonymousCredential {
 
         match attribute {
             Attribute::PublicScalar(x) => self.attributes[index] = Attribute::SecretScalar(*x),
+            Attribute::EitherPoint(p)  => self.attributes[index] = Attribute::SecretPoint(p.clone()),
             Attribute::PublicPoint(_)  => return Err("Public point attributes cannot be converted \
                                                      to secret point attributes because this changes \
                                                      the number of attributes on the credential."),

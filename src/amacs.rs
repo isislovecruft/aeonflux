@@ -167,8 +167,10 @@ pub enum Attribute {
     PublicScalar(Scalar),
     /// A scalar attribute which is hidden upon credential presentation.
     SecretScalar(Scalar),
-    /// A group element attribute which is revealed upon credential presentation.
+    /// A group element attribute which is always revealed upon credential presentation.
     PublicPoint(RistrettoPoint),
+    /// A group element attribute which can be hidden or revealed upon credential presentation.
+    EitherPoint(Plaintext),
     /// A group element attribute which is hidden upon credential presentation.
     SecretPoint(Plaintext),
 }
@@ -229,6 +231,7 @@ impl Messages {
                 Attribute::PublicScalar(m) => m * system_parameters.G_m[i],
                 Attribute::SecretScalar(m) => m * system_parameters.G_m[i],
                 Attribute::PublicPoint(M)  => *M,
+                Attribute::EitherPoint(p)  => p.M1,
                 Attribute::SecretPoint(p)  => p.M1,
             };
             messages.push(M_i);
