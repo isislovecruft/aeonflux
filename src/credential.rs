@@ -22,7 +22,7 @@ use crate::amacs::Attribute;
 use crate::errors::CredentialError;
 use crate::parameters::IssuerParameters;
 use crate::parameters::SystemParameters;
-use crate::nizk::ProofOfValidCredential;
+use crate::nizk::presentation::ProofOfValidCredential;
 use crate::symmetric::Keypair as SymmetricKeypair;
 
 /// An anonymous credential.

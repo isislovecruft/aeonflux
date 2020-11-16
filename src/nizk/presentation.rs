@@ -7,7 +7,7 @@
 // Authors:
 // - isis agora lovecruft <isis@patternsinthevoid.net>
 
-//! Non-interactive zero-knowledge proofs (NIPKs).
+//! Non-interactive zero-knowledge proofs (NIZKs) of credential presentation.
 
 #[cfg(all(not(feature = "std"), feature = "alloc"))]
 use alloc::vec::Vec;
@@ -39,389 +39,12 @@ use zkp::toolbox::verifier::ScalarVar as VerifierScalarVar;
 
 use crate::amacs::Attribute;
 use crate::amacs::EncryptedAttribute;
-use crate::amacs::Messages;
 use crate::credential::AnonymousCredential;
 use crate::errors::CredentialError;
 use crate::issuer::Issuer;
+use crate::nizk::encryption::ProofOfEncryption;
 use crate::parameters::{IssuerParameters, SystemParameters};
-use crate::symmetric::Ciphertext;
 use crate::symmetric::Keypair as SymmetricKeypair;
-use crate::symmetric::Plaintext;
-use crate::symmetric::PublicKey as SymmetricPublicKey; // XXX rename this to something more sensical
-
-pub struct ProofOfIssuance(CompactProof);
-
-/// A non-interactive zero-knowledge proof demonstrating knowledge of the
-/// issuer's secret key, and that an [`AnonymousCredential`] was computed
-/// correctly w.r.t. the pubilshed system and issuer parameters.
-impl ProofOfIssuance {
-    /// Create a [`ProofOfIssuance`].
-    pub(crate) fn prove(
-        issuer: &Issuer,
-        credential: &AnonymousCredential,
-    ) -> ProofOfIssuance
-    {
-        use zkp::toolbox::prover::PointVar;
-        use zkp::toolbox::prover::ScalarVar;
-
-        let mut transcript = Transcript::new(b"2019/1416 anonymous credential");
-        let mut prover = Prover::new(b"2019/1416 issuance proof", &mut transcript);
-
-        // Commit the names of the Camenisch-Stadler secrets to the protocol transcript.
-        let w       = prover.allocate_scalar(b"w",   issuer.amacs_key.w);
-        let w_prime = prover.allocate_scalar(b"w'",  issuer.amacs_key.w_prime);
-        let x_0     = prover.allocate_scalar(b"x_0", issuer.amacs_key.x_0);
-        let x_1     = prover.allocate_scalar(b"x_1", issuer.amacs_key.x_1);
-
-        let mut y: Vec<ScalarVar> = Vec::with_capacity(issuer.system_parameters.NUMBER_OF_ATTRIBUTES as usize);
-
-        for (_i, y_i) in issuer.amacs_key.y.iter().enumerate() {
-            // XXX fix the zkp crate to take Strings
-            //y.push(prover.allocate_scalar(format!("y_{}", _i), y_i));
-            y.push(prover.allocate_scalar(b"y", *y_i));
-        }
-
-        // We also have to commit to the multiplicative identity since one of the
-        // zero-knowledge statements requires the inverse of the G_V generator
-        // without multiplying by any scalar.
-        let one = prover.allocate_scalar(b"1", Scalar::one());
-
-        let t = prover.allocate_scalar(b"t", credential.amac.t);
-
-        // Commit to the values and names of the Camenisch-Stadler publics.
-        let (neg_G_V, _)   = prover.allocate_point(b"-G_V",     -issuer.system_parameters.G_V);
-        let (G_w, _)       = prover.allocate_point(b"G_w",       issuer.system_parameters.G_w);
-        let (G_w_prime, _) = prover.allocate_point(b"G_w_prime", issuer.system_parameters.G_w_prime);
-        let (G_x_0, _)     = prover.allocate_point(b"G_x_0",     issuer.system_parameters.G_x_0);
-        let (G_x_1, _)     = prover.allocate_point(b"G_x_1",     issuer.system_parameters.G_x_1);
-
-        let mut G_y: Vec<PointVar> = Vec::with_capacity(issuer.system_parameters.NUMBER_OF_ATTRIBUTES as usize);
-
-        for (_i, G_y_i) in issuer.system_parameters.G_y.iter().enumerate() {
-            // XXX fix the zkp crate to take Strings
-            //let (G_y_x, _) = prover.allocate_point(format!("G_y_{}", _i), G_y_i);
-            let (G_y_x, _) = prover.allocate_point(b"G_y", *G_y_i);
-
-            G_y.push(G_y_x);
-        }
-
-        let (C_W, _) = prover.allocate_point(b"C_W", issuer.issuer_parameters.C_W);
-        let (I, _)   = prover.allocate_point(b"I",   issuer.issuer_parameters.I);
-        let (U, _)   = prover.allocate_point(b"U", credential.amac.U);
-        let (V, _)   = prover.allocate_point(b"V", credential.amac.V);
-
-        let mut M: Vec<PointVar> = Vec::with_capacity(issuer.system_parameters.NUMBER_OF_ATTRIBUTES as usize);
-
-        let messages: Messages = Messages::from_attributes(&credential.attributes, &issuer.system_parameters);
-
-        for (_i, M_i) in messages.0.iter().enumerate() {
-            // XXX fix the zkp crate to take Strings
-            //let (M_x, _) = prover.allocate_point(format!("M_{}", _i), M_i);
-            let (M_x, _) = prover.allocate_point(b"M", *M_i);
-
-            M.push(M_x);
-        }
-
-        // Constraint #1: C_W = G_w * w + G_w' * w'
-        prover.constrain(C_W, vec![(w, G_w), (w_prime, G_w_prime)]);
-
-        // Constraint #2: I = -G_V + G_x_0 * x_0 + G_x_1 * x_1 + G_y_1 * y_1 + ... + G_y_n * y_n
-        let mut rhs: Vec<(ScalarVar, PointVar)> = Vec::with_capacity(3 + issuer.system_parameters.NUMBER_OF_ATTRIBUTES as usize);
-
-        rhs.push((one, neg_G_V));
-        rhs.push((x_0, G_x_0));
-        rhs.push((x_1, G_x_1));
-        rhs.extend(y.iter().copied().zip(G_y.iter().copied()));
-
-        prover.constrain(I, rhs);
-
-        // Constraint #3: V = G_w * w + U * x_0 + U * x_1 + U * t + \sigma{i=1}{n} M_i * y_i
-        let mut rhs: Vec<(ScalarVar, PointVar)> = Vec::with_capacity(4 + issuer.system_parameters.NUMBER_OF_ATTRIBUTES as usize);
-
-        rhs.push((w, G_w));
-        rhs.push((x_0, U));
-        rhs.push((x_1, U));
-        rhs.push((t, U));
-        rhs.extend(y.iter().copied().zip(M.iter().copied()));
-
-        prover.constrain(V, rhs);
-
-        ProofOfIssuance(prover.prove_compact())
-    }
-
-    /// Verify a [`ProofOfIssuance`].
-    pub fn verify(
-        &self,
-        system_parameters: &SystemParameters,
-        issuer_parameters: &IssuerParameters,
-        credential: &AnonymousCredential,
-    ) -> Result<(), CredentialError>
-    {
-        use zkp::toolbox::verifier::PointVar;
-        use zkp::toolbox::verifier::ScalarVar;
-
-        let mut transcript = Transcript::new(b"2019/1416 anonymous credential");
-        let mut verifier = Verifier::new(b"2019/1416 issuance proof", &mut transcript);
-
-        // Commit the names of the Camenisch-Stadler secrets to the protocol transcript.
-        let w       = verifier.allocate_scalar(b"w");
-        let w_prime = verifier.allocate_scalar(b"w'");
-        let x_0     = verifier.allocate_scalar(b"x_0");
-        let x_1     = verifier.allocate_scalar(b"x_1");
-
-        let mut y: Vec<ScalarVar> = Vec::with_capacity(system_parameters.NUMBER_OF_ATTRIBUTES as usize);
-
-        for _i in 0..system_parameters.NUMBER_OF_ATTRIBUTES as usize {
-            // XXX fix the zkp crate to take Strings
-            //y.push(verifier.allocate_scalar(format!("y_{}", _i)));
-            y.push(verifier.allocate_scalar(b"y"));
-        }
-
-        let one = verifier.allocate_scalar(b"1");
-        let t   = verifier.allocate_scalar(b"t");
-
-        // Commit to the values and names of the Camenisch-Stadler publics.
-        let neg_G_V   = verifier.allocate_point(b"-G_V",    (-system_parameters.G_V).compress())?;
-        let G_w       = verifier.allocate_point(b"G_w",       system_parameters.G_w.compress())?;
-        let G_w_prime = verifier.allocate_point(b"G_w_prime", system_parameters.G_w_prime.compress())?;
-        let G_x_0     = verifier.allocate_point(b"G_x_0",     system_parameters.G_x_0.compress())?;
-        let G_x_1     = verifier.allocate_point(b"G_x_1",     system_parameters.G_x_1.compress())?;
-
-        let mut G_y: Vec<PointVar> = Vec::with_capacity(system_parameters.NUMBER_OF_ATTRIBUTES as usize);
-
-        for (_i, G_y_i) in system_parameters.G_y.iter().enumerate() {
-            // XXX fix the zkp crate to take Strings
-            //G_y.push(verifier.allocate_point(format!("G_y_{}", _i), G_y_i)?);
-            G_y.push(verifier.allocate_point(b"G_y", G_y_i.compress())?);
-        }
-
-        let C_W = verifier.allocate_point(b"C_W", issuer_parameters.C_W.compress())?;
-        let I   = verifier.allocate_point(b"I",   issuer_parameters.I.compress())?;
-        let U   = verifier.allocate_point(b"U", credential.amac.U.compress())?;
-        let V   = verifier.allocate_point(b"V", credential.amac.V.compress())?;
-
-        let mut M: Vec<PointVar> = Vec::with_capacity(system_parameters.NUMBER_OF_ATTRIBUTES as usize);
-
-        let messages: Messages = Messages::from_attributes(&credential.attributes, system_parameters);
-
-        for (_i, M_i) in messages.0.iter().enumerate() {
-            // XXX fix the zkp crate to take Strings
-            //let (M_x, _) = verifier.allocate_point(format!("M_{}", _i), M_i);
-            let M_x = verifier.allocate_point(b"M", M_i.compress())?;
-
-            M.push(M_x);
-        }
-
-        // Constraint #1: C_W = G_w * w + G_w' * w'
-        verifier.constrain(C_W, vec![(w, G_w), (w_prime, G_w_prime)]);
-
-        // Constraint #2: I = -G_V + G_x_0 * x_0 + G_x_1 * x_1 + G_y_1 * y_1 + ... + G_y_n * y_n
-        let mut rhs: Vec<(ScalarVar, PointVar)> = Vec::with_capacity(3 + system_parameters.NUMBER_OF_ATTRIBUTES as usize);
-
-        rhs.push((one, neg_G_V));
-        rhs.push((x_0, G_x_0));
-        rhs.push((x_1, G_x_1));
-        rhs.extend(y.iter().copied().zip(G_y.iter().copied()));
-
-        verifier.constrain(I, rhs);
-
-        // Constraint #3: V = G_w * w + U * x_0 + U * x_1 + U * t + \sigma{i=1}{n} M_i * y_i
-        let mut rhs: Vec<(ScalarVar, PointVar)> = Vec::with_capacity(4 + system_parameters.NUMBER_OF_ATTRIBUTES as usize);
-
-        rhs.push((w, G_w));
-        rhs.push((x_0, U));
-        rhs.push((x_1, U));
-        rhs.push((t, U));
-        rhs.extend(y.iter().copied().zip(M.iter().copied()));
-
-        verifier.constrain(V, rhs);
-
-        verifier.verify_compact(&self.0).or_else(|_| Err(CredentialError::VerificationFailure))
-    }
-}
-
-/// A proof-of-knowledge that a ciphertext encrypts a plaintext
-/// committed to in a list of commitments.
-pub struct ProofOfEncryption {
-    proof: CompactProof,
-    public_key: SymmetricPublicKey,
-    ciphertext: Ciphertext,
-    index: u16,
-    C_y_1: RistrettoPoint,
-    C_y_2: RistrettoPoint,
-    C_y_3: RistrettoPoint,
-    C_y_2_prime: RistrettoPoint,
-}
-
-impl ProofOfEncryption {
-    /// Prove in zero-knowledge that a ciphertext is a verifiable encryption of
-    /// a plaintext w.r.t. a valid commitment to a secret symmetric key.
-    ///
-    /// # Inputs
-    ///
-    /// * The [`SystemParameters`] for this anonymous credential instantiation,
-    /// * A `plaintext` of up to thirty bytes.
-    /// * The `index` of the attribute to be encrypted.
-    /// * A symmetric "keypair",
-    /// * The nonce, `z`, must be reused from the outer-lying [`ProofOfValidCredential`].
-    ///
-    /// # Returns
-    ///
-    /// A `Result` whose `Ok` value is empty, otherwise a [`CredentialError`].
-    pub(crate) fn prove(
-        system_parameters: &SystemParameters,
-        plaintext: &Plaintext,
-        index: u16,
-        keypair: &SymmetricKeypair,
-        z: &Scalar,
-    ) -> ProofOfEncryption
-    {
-        // Encrypt the plaintext.
-        let ciphertext_ = keypair.encrypt(&plaintext);
-
-        // Compute the vector C of commitments to the plaintext.
-        let C_y_1_ = (system_parameters.G_y[0] * z) + plaintext.M1;
-        let C_y_2_ = (system_parameters.G_y[1] * z) + plaintext.M2;
-        let C_y_3_ = (system_parameters.G_y[2] * z) + (system_parameters.G_m[index as usize] * plaintext.m3);
-
-        // Compute C_y_2' = C_y_2 * a1.
-        let C_y_2_prime_ = C_y_2_ * keypair.secret.a1;
-
-        // Calculate z1 = -z(a0 + a1 * m3).
-        let z1_ = -z * (keypair.secret.a0 + keypair.secret.a1 * plaintext.m3);
-
-        // Construct a protocol transcript and prover.
-        let mut transcript = Transcript::new(b"2019/1416 anonymous credentials");
-        let mut prover = Prover::new(b"2019/1416 proof of encryption", &mut transcript);
-
-        // Commit the names of the Camenisch-Stadler secrets to the protocol transcript.
-        let a  = prover.allocate_scalar(b"a",  keypair.secret.a);
-        let a0 = prover.allocate_scalar(b"a0", keypair.secret.a0);
-        let a1 = prover.allocate_scalar(b"a1", keypair.secret.a1);
-        let m3 = prover.allocate_scalar(b"m3", plaintext.m3);
-        let z  = prover.allocate_scalar(b"z",  *z);
-        let z1 = prover.allocate_scalar(b"z1", z1_);
-
-        // Commit to the values and names of the Camenisch-Stadler publics.
-        let (pk, _)             = prover.allocate_point(b"pk",       keypair.public.pk);
-        let (G_a, _)            = prover.allocate_point(b"G_a",      system_parameters.G_a);
-        let (G_a_0, _)          = prover.allocate_point(b"G_a_0",    system_parameters.G_a0);
-        let (G_a_1, _)          = prover.allocate_point(b"G_a_1",    system_parameters.G_a1);
-        let (G_y_1, _)          = prover.allocate_point(b"G_y_1",    system_parameters.G_y[0]);
-        let (G_y_2, _)          = prover.allocate_point(b"G_y_2",    system_parameters.G_y[1]);
-        let (G_y_3, _)          = prover.allocate_point(b"G_y_3",    system_parameters.G_y[2]);
-        let (G_m_3, _)          = prover.allocate_point(b"G_m_3",    system_parameters.G_m[index as usize]);
-        let (C_y_2, _)          = prover.allocate_point(b"C_y_2",    C_y_2_);
-        let (C_y_3, _)          = prover.allocate_point(b"C_y_3",    C_y_3_);
-        let (C_y_2_prime, _)    = prover.allocate_point(b"C_y_2'",   C_y_2_prime_);
-        let (C_y_1_minus_E2, _) = prover.allocate_point(b"C_y_1-E2", C_y_1_ - ciphertext_.E2);
-        let (E1, _)             = prover.allocate_point(b"E1",       ciphertext_.E1);
-        let (minus_E1, _)       = prover.allocate_point(b"-E1",      -ciphertext_.E1);
-
-        // Constraint #1: Prove knowledge of the secret portions of the symmetric key.
-        //                pk = G_a * a + G_a0 * a0 + G_a1 * a1
-        prover.constrain(pk, vec![(a, G_a), (a0, G_a_0), (a1, G_a_1)]);
-
-        // Constraint #2: The plaintext of this encryption is the message.
-        //                C_y_1 - E2 = G_y_1 * z - E_1 * a
-        prover.constrain(C_y_1_minus_E2, vec![(z, G_y_1), (a, minus_E1)]);
-
-        // Constraint #3: The encryption C_y_2' of the commitment C_y_2 is formed correctly w.r.t. the secret key.
-        //                C_y_2' = C_y_2 * a1
-        prover.constrain(C_y_2_prime, vec![(a1, C_y_2)]);
-
-        // Constraint #4: The encryption E1 is well formed.
-        //                  E1 = C_y_2            * a0 + C_y_2'                * m3    + G_y_2 * z1
-        // M2 * (a0 + a1 * m3) = (M2 + G_y_2 * z) * a0 + (M2 + G_y_2 * z) * a1 * m3    + G_y_2 * -z (a0 + a1 * m3)
-        // M2(a0) + M2(a1)(m3) = M2(a0) + G_y_2(z)(a0) + M2(a1)(m3) + G_y_2(z)(a1)(m3) + G_y_2(-z)(a0) + G_y_2(-z)(a1)(m3)
-        // M2(a0) + M2(a1)(m3) = M2(a0)                + M2(a1)(m3)
-        prover.constrain(E1, vec![(a0, C_y_2), (m3, C_y_2_prime), (z1, G_y_2)]);
-
-        // Constraint #5: The commitment to the hash m3 is a correct hash of the message commited to.
-        prover.constrain(C_y_3, vec![(z, G_y_3), (m3, G_m_3)]);
-
-        let proof = prover.prove_compact();
-
-        ProofOfEncryption {
-            proof: proof,
-            public_key: keypair.public,
-            ciphertext: ciphertext_,
-            index: index,
-            C_y_1: C_y_1_,
-            C_y_2: C_y_2_,
-            C_y_3: C_y_3_,
-            C_y_2_prime: C_y_2_prime_,
-        }
-    }
-
-    /// Verify that this [`ProofOfEncryption`] proves that a `ciphertext` is a
-    /// correct encryption of a verifiably-encrypted plaintext.
-    ///
-    /// # Inputs
-    ///
-    /// * The [`SystemParameters`] for this anonymous credential instantiation,
-    ///
-    /// # Returns
-    ///
-    /// A `Result` whose `Ok` value is empty, otherwise a [`CredentialError`].
-    pub(crate) fn verify(
-        &self,
-        system_parameters: &SystemParameters,
-    ) -> Result<(), CredentialError>
-    {
-        // Construct a protocol transcript and verifier.
-        let mut transcript = Transcript::new(b"2019/1416 anonymous credentials");
-        let mut verifier = Verifier::new(b"2019/1416 proof of encryption", &mut transcript);
-
-        // Commit the names of the Camenisch-Stadler secrets to the protocol transcript.
-        let a  = verifier.allocate_scalar(b"a");
-        let a0 = verifier.allocate_scalar(b"a0");
-        let a1 = verifier.allocate_scalar(b"a1");
-        let m3 = verifier.allocate_scalar(b"m3");
-        let z  = verifier.allocate_scalar(b"z");
-        let z1 = verifier.allocate_scalar(b"z1");
-
-        // Commit to the values and names of the Camenisch-Stadler publics.
-        let pk             = verifier.allocate_point(b"pk",       self.public_key.pk.compress())?;
-        let G_a            = verifier.allocate_point(b"G_a",      system_parameters.G_a.compress())?;
-        let G_a_0          = verifier.allocate_point(b"G_a_0",    system_parameters.G_a0.compress())?;
-        let G_a_1          = verifier.allocate_point(b"G_a_1",    system_parameters.G_a1.compress())?;
-        let G_y_1          = verifier.allocate_point(b"G_y_1",    system_parameters.G_y[0].compress())?;
-        let G_y_2          = verifier.allocate_point(b"G_y_2",    system_parameters.G_y[1].compress())?;
-        let G_y_3          = verifier.allocate_point(b"G_y_3",    system_parameters.G_y[2].compress())?;
-        let G_m_3          = verifier.allocate_point(b"G_m_3",    system_parameters.G_m[self.index as usize].compress())?;
-        let C_y_2          = verifier.allocate_point(b"C_y_2",    self.C_y_2.compress())?;
-        let C_y_3          = verifier.allocate_point(b"C_y_3",    self.C_y_3.compress())?;
-        let C_y_2_prime    = verifier.allocate_point(b"C_y_2'",   self.C_y_2_prime.compress())?;
-        let C_y_1_minus_E2 = verifier.allocate_point(b"C_y_1-E2", (self.C_y_1 - self.ciphertext.E2).compress())?;
-        let E1             = verifier.allocate_point(b"E1",       self.ciphertext.E1.compress())?;
-        let minus_E1       = verifier.allocate_point(b"-E1",      (-self.ciphertext.E1).compress())?;
-
-        // Constraint #1: Prove knowledge of the secret portions of the symmetric key.
-        //                pk = G_a * a + G_a0 * a0 + G_a1 * a1
-        verifier.constrain(pk, vec![(a, G_a), (a0, G_a_0), (a1, G_a_1)]);
-
-        // Constraint #2: The plaintext of this encryption is the message.
-        //                C_y_1 - E2 = G_y_1 * z - E_1 * a
-        verifier.constrain(C_y_1_minus_E2, vec![(z, G_y_1), (a, minus_E1)]);
-
-        // Constraint #3: The encryption C_y_2' of the commitment C_y_2 is formed correctly w.r.t. the secret key.
-        //                C_y_2' = C_y_2 * a1
-        verifier.constrain(C_y_2_prime, vec![(a1, C_y_2)]);
-
-        // Constraint #4: The encryption E1 is well formed.
-        //                  E1 = C_y_2            * a0 + C_y_2'                * m3    + G_y_2 * z1
-        // M2 * (a0 + a1 * m3) = (M2 + G_y_2 * z) * a0 + (M2 + G_y_2 * z) * a1 * m3    + G_y_2 * -z (a0 + a1 * m3)
-        // M2(a0) + M2(a1)(m3) = M2(a0) + G_y_2(z)(a0) + M2(a1)(m3) + G_y_2(z)(a1)(m3) + G_y_2(-z)(a0) + G_y_2(-z)(a1)(m3)
-        // M2(a0) + M2(a1)(m3) = M2(a0)                + M2(a1)(m3)
-        verifier.constrain(E1, vec![(a0, C_y_2), (m3, C_y_2_prime), (z1, G_y_2)]);
-
-        // Constraint #5: The commitment to the hash m3 is a correct hash of the message commited to.
-        verifier.constrain(C_y_3, vec![(z, G_y_3), (m3, G_m_3)]);
-
-        verifier.verify_compact(&self.proof).or_else(|_| Err(CredentialError::VerificationFailure))
-    }
-}
 
 /// An incredibly shitty and inelegant hashmap-like structure to store/"index"
 /// hidden scalar attributes during construction of a [`ProofOfValidCredential`].
@@ -502,6 +125,14 @@ pub struct ProofOfValidCredential {
 
 impl ProofOfValidCredential {
     /// Create a [`ProofOfValidCredential`].
+    ///
+    /// # Warning
+    ///
+    /// If there are any [`EitherPoint`]s in the `credential`'s attributes, they
+    /// will be treated as if they are meant to be publicly revealed rather than
+    /// encrypted.  If you need them to be encrypted for this credential
+    /// presentation, you *must* call `credential.hide_attribute()` with their
+    /// indices *before* creating this proof.
     pub(crate) fn prove<C>(
         system_parameters: &SystemParameters,
         issuer_parameters: &IssuerParameters,
@@ -535,6 +166,7 @@ impl ProofOfValidCredential {
         for (i, attribute) in credential.attributes.iter().enumerate() {
             match attribute {
                 Attribute::PublicPoint(_)  =>   C_y_.push(system_parameters.G_y[i] * z_),
+                Attribute::EitherPoint(_)  =>   C_y_.push(system_parameters.G_y[i] * z_),
                 Attribute::SecretPoint(p)  =>   C_y_.push(system_parameters.G_y[i] * z_ + p.M1),
                 Attribute::PublicScalar(_) =>   C_y_.push(system_parameters.G_y[i] * z_),
                 Attribute::SecretScalar(m) => { C_y_.push(system_parameters.G_y[i] * z_ + system_parameters.G_m[i] * *m);
@@ -655,6 +287,7 @@ impl ProofOfValidCredential {
                 Attribute::PublicScalar(x) => encrypted_attributes.push(EncryptedAttribute::PublicScalar(*x)),
                 Attribute::SecretScalar(_) => encrypted_attributes.push(EncryptedAttribute::SecretScalar),
                 Attribute::PublicPoint(x)  => encrypted_attributes.push(EncryptedAttribute::PublicPoint(*x)),
+                Attribute::EitherPoint(x)  => encrypted_attributes.push(EncryptedAttribute::PublicPoint(x.M1)),
                 Attribute::SecretPoint(pt) => {
                     // The .unwrap() here can never panic because we check above that the key isn't
                     // None if we have encrypted group element attributes.
@@ -663,6 +296,8 @@ impl ProofOfValidCredential {
                 },
             }
         }
+
+        println!("Z is {:?}", Z_.compress());
 
         Ok(ProofOfValidCredential {
             proof: proof,
@@ -696,6 +331,8 @@ impl ProofOfValidCredential {
         //            \sigma_{i \in \mathcal{H}}{C_y_i * y_i} +
         //            \sigma_{i \notin \mathcal{H}}{(C_y_i + M_i) * y_i})
         let mut Z_ = self.C_V - (issuer.amacs_key.W + self.C_x_0 * issuer.amacs_key.x_0 + self.C_x_1 * issuer.amacs_key.x_1);
+
+        println!("Z recalculated is {:?}", Z_.compress());
 
         for (i, attribute) in self.encrypted_attributes.iter().enumerate() {
             match attribute {
@@ -784,7 +421,9 @@ impl ProofOfValidCredential {
             }
         }
 
-        verifier.verify_compact(&self.proof).or_else(|_| return Err(CredentialError::VerificationFailure));
+        println!("before");
+        verifier.verify_compact(&self.proof).or(Err(CredentialError::VerificationFailure))?;
+        println!("after");
 
         // Check the proofs of correct encryptions and fail if any cannot be verified.
         for (_i, proof_of_encryption) in self.proofs_of_encryption.iter() {
@@ -798,62 +437,12 @@ impl ProofOfValidCredential {
 #[cfg(test)]
 mod test {
     use std::string::String;
-    use std::vec::Vec;
 
     use super::*;
 
     use crate::user::CredentialRequestConstructor;
 
-    use curve25519_dalek::traits::IsIdentity;
-
     use rand::thread_rng;
-
-    #[test]
-    fn issuance_proof() {
-        let mut rng = thread_rng();
-        let system_parameters = SystemParameters::generate(&mut rng, 7).unwrap();
-        let issuer = Issuer::new(&system_parameters, &mut rng);
-        let message: Vec<u8> = vec![1u8];
-        let mut request = CredentialRequestConstructor::new(&system_parameters);
-
-        request.append_revealed_scalar(Scalar::random(&mut rng));
-        request.append_revealed_scalar(Scalar::random(&mut rng));
-        request.append_revealed_point(RistrettoPoint::random(&mut rng));
-        let _plaintext = request.append_plaintext(&message);
-        request.append_revealed_scalar(Scalar::random(&mut rng));
-
-        let credential_request = request.finish();
-        let issuance = issuer.issue(credential_request, &mut rng).unwrap();
-        let credential = issuance.verify(&system_parameters, &issuer.issuer_parameters);
-
-        assert!(credential.is_ok());
-    }
-
-    /// An issuance proof with a plaintext equal to the identity element will fail.
-    #[test]
-    #[should_panic(expected = "assertion failed: credential.is_ok()")]
-    fn issuance_proof_identity_plaintext() {
-        let mut rng = thread_rng();
-        let system_parameters = SystemParameters::generate(&mut rng, 8).unwrap();
-        let issuer = Issuer::new(&system_parameters, &mut rng);
-        let message: Vec<u8> = vec![0u8; 30];
-        let mut request = CredentialRequestConstructor::new(&system_parameters);
-        let plaintext = request.append_plaintext(&message);
-
-        assert!(plaintext[0].M1.is_identity());
-
-        request.append_revealed_scalar(Scalar::random(&mut rng));
-        request.append_revealed_scalar(Scalar::random(&mut rng));
-        request.append_revealed_point(RistrettoPoint::random(&mut rng));
-        request.append_revealed_point(RistrettoPoint::random(&mut rng));
-        request.append_revealed_scalar(Scalar::random(&mut rng));
-
-        let credential_request = request.finish();
-        let issuance = issuer.issue(credential_request, &mut rng).unwrap();
-        let credential = issuance.verify(&system_parameters, &issuer.issuer_parameters);
-
-        assert!(credential.is_ok());
-    }
 
     #[test]
     fn encryption_proof() {
