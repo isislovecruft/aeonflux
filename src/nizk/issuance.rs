@@ -230,6 +230,7 @@ mod test {
 
     use crate::user::CredentialRequestConstructor;
 
+    use curve25519_dalek::ristretto::RistrettoPoint;
     use curve25519_dalek::traits::IsIdentity;
 
     use rand::thread_rng;

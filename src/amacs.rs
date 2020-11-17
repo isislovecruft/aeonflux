@@ -290,6 +290,7 @@ impl Amac {
     }
 
     /// Verify this algebraic MAC w.r.t. a secret key and vector of messages.
+    #[allow(unused)] // We never actually call this function as the AMAC is verified indirectly in a NIZK.
     pub(crate) fn verify(
         &self,
         system_parameters: &SystemParameters,

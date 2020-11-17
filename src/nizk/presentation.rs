@@ -440,6 +440,7 @@ mod test {
 
     use super::*;
 
+    use crate::symmetric::Plaintext;
     use crate::user::CredentialRequestConstructor;
 
     use rand::thread_rng;
@@ -477,7 +478,7 @@ mod test {
         let mut request = CredentialRequestConstructor::new(&system_parameters);
         let message = String::from("This is a tsunami alert test..").into_bytes();
         // Each plaintext takes up three attributes;
-        let plaintext = request.append_plaintext(&message);
+        let _plaintext = request.append_plaintext(&message);
 
         request.append_revealed_scalar(Scalar::random(&mut rng));
         request.append_revealed_scalar(Scalar::random(&mut rng));
