@@ -452,31 +452,6 @@ mod test {
     use rand::thread_rng;
 
     #[test]
-    fn encryption_proof() {
-        let mut rng = thread_rng();
-        let system_parameters = SystemParameters::generate(&mut rng, 5).unwrap();
-        let (keypair, _) = SymmetricKeypair::generate(&system_parameters, &mut rng);
-        let z = Scalar::random(&mut rng);
-        let message1: &[u8; 30] = b"This is a tsunami alert test..";
-        let plaintext: Plaintext = message1.into();
-
-        let proof = ProofOfEncryption::prove(&system_parameters, &plaintext, 1u16, &keypair, &z);
-        let decryption = keypair.decrypt(&proof.ciphertext).unwrap();
-
-        assert!(decryption.M1 == plaintext.M1);
-        assert!(decryption.M2 == plaintext.M2);
-        assert!(decryption.m3 == plaintext.m3);
-
-        let message2: [u8; 30] = (&decryption).into();
-
-        assert!(message1 == &message2);
-
-        let verification = proof.verify(&system_parameters);
-
-        assert!(verification.is_ok());
-    }
-
-    #[test]
     fn credential_proof_10_attributes() {
         let mut rng = thread_rng();
         let system_parameters = SystemParameters::generate(&mut rng, 10).unwrap();
