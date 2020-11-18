@@ -70,20 +70,20 @@ impl ProofOfIssuance {
         let t = prover.allocate_scalar(b"t", credential.amac.t);
 
         // Commit to the values and names of the Camenisch-Stadler publics.
-        let (neg_G_V, _)   = prover.allocate_point(b"-G_V",     -issuer.system_parameters.G_V);
+        let (G_V, _)       = prover.allocate_point(b"G_V",       issuer.system_parameters.G_V);
         let (G_w, _)       = prover.allocate_point(b"G_w",       issuer.system_parameters.G_w);
         let (G_w_prime, _) = prover.allocate_point(b"G_w_prime", issuer.system_parameters.G_w_prime);
-        let (G_x_0, _)     = prover.allocate_point(b"G_x_0",     issuer.system_parameters.G_x_0);
-        let (G_x_1, _)     = prover.allocate_point(b"G_x_1",     issuer.system_parameters.G_x_1);
+        let (neg_G_x_0, _) = prover.allocate_point(b"-G_x_0",   -issuer.system_parameters.G_x_0);
+        let (neg_G_x_1, _) = prover.allocate_point(b"-G_x_1",   -issuer.system_parameters.G_x_1);
 
-        let mut G_y: Vec<PointVar> = Vec::with_capacity(issuer.system_parameters.NUMBER_OF_ATTRIBUTES as usize);
+        let mut neg_G_y: Vec<PointVar> = Vec::with_capacity(issuer.system_parameters.NUMBER_OF_ATTRIBUTES as usize);
 
         for (_i, G_y_i) in issuer.system_parameters.G_y.iter().enumerate() {
             // XXX fix the zkp crate to take Strings
             //let (G_y_x, _) = prover.allocate_point(format!("G_y_{}", _i), G_y_i);
-            let (G_y_x, _) = prover.allocate_point(b"G_y", *G_y_i);
+            let (neg_G_y_x, _) = prover.allocate_point(b"-G_y", -G_y_i);
 
-            G_y.push(G_y_x);
+            neg_G_y.push(neg_G_y_x);
         }
 
         let (C_W, _) = prover.allocate_point(b"C_W", issuer.issuer_parameters.C_W);
@@ -106,13 +106,13 @@ impl ProofOfIssuance {
         // Constraint #1: C_W = G_w * w + G_w' * w'
         prover.constrain(C_W, vec![(w, G_w), (w_prime, G_w_prime)]);
 
-        // Constraint #2: I = -G_V + G_x_0 * x_0 + G_x_1 * x_1 + G_y_1 * y_1 + ... + G_y_n * y_n
+        // Constraint #2: I = G_V - (G_x_0 * x_0 + G_x_1 * x_1 + G_y_1 * y_1 + ... + G_y_n * y_n)
         let mut rhs: Vec<(ScalarVar, PointVar)> = Vec::with_capacity(3 + issuer.system_parameters.NUMBER_OF_ATTRIBUTES as usize);
 
-        rhs.push((one, neg_G_V));
-        rhs.push((x_0, G_x_0));
-        rhs.push((x_1, G_x_1));
-        rhs.extend(y.iter().copied().zip(G_y.iter().copied()));
+        rhs.push((one, G_V));
+        rhs.push((x_0, neg_G_x_0));
+        rhs.push((x_1, neg_G_x_1));
+        rhs.extend(y.iter().copied().zip(neg_G_y.iter().copied()));
 
         prover.constrain(I, rhs);
 
@@ -162,18 +162,18 @@ impl ProofOfIssuance {
         let t   = verifier.allocate_scalar(b"t");
 
         // Commit to the values and names of the Camenisch-Stadler publics.
-        let neg_G_V   = verifier.allocate_point(b"-G_V",    (-system_parameters.G_V).compress())?;
+        let G_V       = verifier.allocate_point(b"G_V",       system_parameters.G_V.compress())?;
         let G_w       = verifier.allocate_point(b"G_w",       system_parameters.G_w.compress())?;
         let G_w_prime = verifier.allocate_point(b"G_w_prime", system_parameters.G_w_prime.compress())?;
-        let G_x_0     = verifier.allocate_point(b"G_x_0",     system_parameters.G_x_0.compress())?;
-        let G_x_1     = verifier.allocate_point(b"G_x_1",     system_parameters.G_x_1.compress())?;
+        let neg_G_x_0 = verifier.allocate_point(b"-G_x_0",   (-system_parameters.G_x_0).compress())?;
+        let neg_G_x_1 = verifier.allocate_point(b"-G_x_1",   (-system_parameters.G_x_1).compress())?;
 
-        let mut G_y: Vec<PointVar> = Vec::with_capacity(system_parameters.NUMBER_OF_ATTRIBUTES as usize);
+        let mut neg_G_y: Vec<PointVar> = Vec::with_capacity(system_parameters.NUMBER_OF_ATTRIBUTES as usize);
 
         for (_i, G_y_i) in system_parameters.G_y.iter().enumerate() {
             // XXX fix the zkp crate to take Strings
             //G_y.push(verifier.allocate_point(format!("G_y_{}", _i), G_y_i)?);
-            G_y.push(verifier.allocate_point(b"G_y", G_y_i.compress())?);
+            neg_G_y.push(verifier.allocate_point(b"-G_y", (-G_y_i).compress())?);
         }
 
         let C_W = verifier.allocate_point(b"C_W", issuer_parameters.C_W.compress())?;
@@ -196,13 +196,13 @@ impl ProofOfIssuance {
         // Constraint #1: C_W = G_w * w + G_w' * w'
         verifier.constrain(C_W, vec![(w, G_w), (w_prime, G_w_prime)]);
 
-        // Constraint #2: I = -G_V + G_x_0 * x_0 + G_x_1 * x_1 + G_y_1 * y_1 + ... + G_y_n * y_n
+        // Constraint #2: I = G_V - (G_x_0 * x_0 + G_x_1 * x_1 + G_y_1 * y_1 + ... + G_y_n * y_n)
         let mut rhs: Vec<(ScalarVar, PointVar)> = Vec::with_capacity(3 + system_parameters.NUMBER_OF_ATTRIBUTES as usize);
 
-        rhs.push((one, neg_G_V));
-        rhs.push((x_0, G_x_0));
-        rhs.push((x_1, G_x_1));
-        rhs.extend(y.iter().copied().zip(G_y.iter().copied()));
+        rhs.push((one, G_V));
+        rhs.push((x_0, neg_G_x_0));
+        rhs.push((x_1, neg_G_x_1));
+        rhs.extend(y.iter().copied().zip(neg_G_y.iter().copied()));
 
         verifier.constrain(I, rhs);
 

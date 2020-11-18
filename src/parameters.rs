@@ -348,12 +348,12 @@ impl IssuerParameters {
         let C_W: RistrettoPoint = (system_parameters.G_w * secret_key.w) +
                                   (system_parameters.G_w_prime * secret_key.w_prime);
 
-        let mut I: RistrettoPoint = (-system_parameters.G_V * Scalar::one()) +
-                                    (system_parameters.G_x_0 * secret_key.x_0) +
-                                    (system_parameters.G_x_1 * secret_key.x_1);
+        let mut I: RistrettoPoint = system_parameters.G_V -
+                                   (system_parameters.G_x_0 * secret_key.x_0) -
+                                   (system_parameters.G_x_1 * secret_key.x_1);
 
         for i in 0..system_parameters.NUMBER_OF_ATTRIBUTES as usize {
-            I += system_parameters.G_y[i] * secret_key.y[i];
+            I -= system_parameters.G_y[i] * secret_key.y[i];
         }
 
         IssuerParameters { C_W, I }

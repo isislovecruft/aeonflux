@@ -330,16 +330,16 @@ impl ProofOfValidCredential {
         // Z = C_V - (W + C_x0 * x0 + C_x1 * x1 +
         //            \sigma_{i \in \mathcal{H}}{C_y_i * y_i} +
         //            \sigma_{i \notin \mathcal{H}}{(C_y_i + M_i) * y_i})
-        let mut Z_ = self.C_V - (issuer.amacs_key.W + self.C_x_0 * issuer.amacs_key.x_0 + self.C_x_1 * issuer.amacs_key.x_1);
+        let mut Z_ = self.C_V - issuer.amacs_key.W - (self.C_x_0 * issuer.amacs_key.x_0) - (self.C_x_1 * issuer.amacs_key.x_1);
 
         println!("Z recalculated is {:?}", Z_.compress());
 
         for (i, attribute) in self.encrypted_attributes.iter().enumerate() {
             match attribute {
-                EncryptedAttribute::PublicScalar(m_i) => Z_ -= (self.C_y[i] + (issuer.system_parameters.G_m[i] * m_i)) * issuer.amacs_key.y[i],
-                EncryptedAttribute::SecretScalar      => Z_ -=  self.C_y[i]                                            * issuer.amacs_key.y[i],
-                EncryptedAttribute::PublicPoint(M_i)  => Z_ -= (self.C_y[i] + M_i)                                     * issuer.amacs_key.y[i],
-                EncryptedAttribute::SecretPoint       => Z_ -=  self.C_y[i]                                            * issuer.amacs_key.y[i],
+                EncryptedAttribute::PublicScalar(m_i) => Z_ -= issuer.amacs_key.y[i] * (self.C_y[i] + (issuer.system_parameters.G_m[i] * m_i)),
+                EncryptedAttribute::SecretScalar      => Z_ -= issuer.amacs_key.y[i] *  self.C_y[i],
+                EncryptedAttribute::PublicPoint(M_i)  => Z_ -= issuer.amacs_key.y[i] * (self.C_y[i] + M_i),
+                EncryptedAttribute::SecretPoint       => Z_ -= issuer.amacs_key.y[i] *  self.C_y[i],
             }
         }
 
