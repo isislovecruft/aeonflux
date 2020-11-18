@@ -199,7 +199,6 @@ impl ProofOfValidCredential {
         }
 
         // Feed in the domain separators and values for the publics into the transcript.
-        let (Z, _)     = prover.allocate_point(b"Z", Z_);
         let (I, _)     = prover.allocate_point(b"I", issuer_parameters.I);
         let (C_x_1, _) = prover.allocate_point(b"C_x_1", C_x_1_);
         let (C_x_0, _) = prover.allocate_point(b"C_x_0", C_x_0_);
@@ -242,6 +241,10 @@ impl ProofOfValidCredential {
 
             G_m.push((*i, G_m_i));
         }
+
+        // Put the calculation of Z last so that we can use merlin's
+        // "debug-transcript" feature to detect if anything else was different.
+        let (Z, _) = prover.allocate_point(b"Z", Z_);
 
         // Constraint #1: Prove knowledge of the nonce, z, and the correctness of the AMAC with Z.
         //                Z = I * z
@@ -332,8 +335,6 @@ impl ProofOfValidCredential {
         //            \sigma_{i \notin \mathcal{H}}{(C_y_i + M_i) * y_i})
         let mut Z_ = self.C_V - issuer.amacs_key.W - (self.C_x_0 * issuer.amacs_key.x_0) - (self.C_x_1 * issuer.amacs_key.x_1);
 
-        println!("Z recalculated is {:?}", Z_.compress());
-
         for (i, attribute) in self.encrypted_attributes.iter().enumerate() {
             match attribute {
                 EncryptedAttribute::PublicScalar(m_i) => Z_ -= issuer.amacs_key.y[i] * (self.C_y[i] + (issuer.system_parameters.G_m[i] * m_i)),
@@ -342,6 +343,8 @@ impl ProofOfValidCredential {
                 EncryptedAttribute::SecretPoint       => Z_ -= issuer.amacs_key.y[i] *  self.C_y[i],
             }
         }
+
+        println!("Z recalculated is {:?}", Z_.compress());
 
         // Create a transcript and verifier.
         let mut transcript = Transcript::new(b"2019/1416 anonymous credential");
@@ -362,7 +365,6 @@ impl ProofOfValidCredential {
         }
 
         // Feed in the domain separators and values for the publics into the transcript.
-        let Z     = verifier.allocate_point(b"Z", Z_.compress())?;
         let I     = verifier.allocate_point(b"I", issuer.issuer_parameters.I.compress())?;
         let C_x_1 = verifier.allocate_point(b"C_x_1", self.C_x_1.compress())?;
         let C_x_0 = verifier.allocate_point(b"C_x_0", self.C_x_0.compress())?;
@@ -399,6 +401,10 @@ impl ProofOfValidCredential {
             // G_m.push(verifier.allocate_point(format!(b"G_m_{}", i), issuer.system_parameters.G_m[i].compress())?);
             G_m.push((*i, verifier.allocate_point(b"G_m", issuer.system_parameters.G_m[*i].compress())?));
         }
+
+        // Put the recalculation of Z last so that we can use merlin's
+        // "debug-transcript" feature to detect if anything else was different.
+        let Z = verifier.allocate_point(b"Z", Z_.compress())?;
 
         // Constraint #1: Prove knowledge of the nonce, z, and the correctness of the AMAC with Z.
         //                Z = I * z
