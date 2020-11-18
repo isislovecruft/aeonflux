@@ -37,7 +37,7 @@ serde = { version = "1" }
 sha2 = { version = "0.8", default-features = false }
 subtle = { version = "2" }
 zeroize = { version = "1", default-features = false, features = ["zeroize_derive"] }
-zkp = { version = "0.7" }
+zkp = { version = "0.7", default-features = false }
 
 [dev-dependencies]
 criterion = { version = "0.3" }
@@ -47,8 +47,9 @@ rand = { version = "0.7" }
 [features]
 default = [ "std", "nightly", "u64_backend" ]
 std = [ "curve25519-dalek/std", "sha2/std" ]
-nightly = [ "curve25519-dalek/nightly", "subtle/nightly" ]
+nightly = [ "curve25519-dalek/nightly", "subtle/nightly", "zkp/nightly" ]
 alloc = [ "curve25519-dalek/alloc" ]
-u32_backend = [ "curve25519-dalek/u32_backend" ]
-u64_backend = [ "curve25519-dalek/u64_backend" ]
-simd_backend = [ "curve25519-dalek/simd_backend" ]
+debug-transcript = [ "zkp/debug-transcript" ]
+u32_backend = [ "curve25519-dalek/u32_backend", "zkp/u32_backend" ]
+u64_backend = [ "curve25519-dalek/u64_backend", "zkp/u64_backend" ]
+simd_backend = [ "curve25519-dalek/simd_backend", "zkp/simd_backend" ]
