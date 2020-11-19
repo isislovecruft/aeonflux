@@ -303,8 +303,6 @@ impl ProofOfValidCredential {
             }
         }
 
-        println!("Z is {:?}", Z_.compress());
-
         Ok(ProofOfValidCredential {
             proof: proof,
             proofs_of_encryption: proofs_of_encryption,
@@ -347,8 +345,6 @@ impl ProofOfValidCredential {
             };
             Z_ -= x * issuer.amacs_key.y[i];
         }
-
-        println!("Z recalculated is {:?}", Z_.compress());
 
         // Create a transcript and verifier.
         let mut transcript = Transcript::new(b"2019/1416 anonymous credential");
@@ -431,9 +427,7 @@ impl ProofOfValidCredential {
             }
         }
 
-        println!("before");
         verifier.verify_compact(&self.proof).or(Err(CredentialError::VerificationFailure))?;
-        println!("after");
 
         // Check the proofs of correct encryptions and fail if any cannot be verified.
         for (_i, proof_of_encryption) in self.proofs_of_encryption.iter() {
