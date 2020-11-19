@@ -259,8 +259,8 @@ impl Amac {
     {
         let messages: Messages = Messages::from_attributes(attributes, system_parameters);
 
-        // V = W + U * x_0 + U * x_1 + U * t
-        let mut V: RistrettoPoint = secret_key.W + (U * secret_key.x_0) + (U * secret_key.x_1) + (U * t);
+        // V = W + U * x_0 + U * x_1 * t
+        let mut V: RistrettoPoint = secret_key.W + (U * secret_key.x_0) + (U * (secret_key.x_1 * t));
 
         // V = W + U * x_0 + U * x_1 + U * t + \sigma{i=1}{n} M_i y_i
         V += RistrettoPoint::multiscalar_mul(&secret_key.y[..], &messages.0[..]);

@@ -67,8 +67,6 @@ impl ProofOfIssuance {
         // without multiplying by any scalar.
         let one = prover.allocate_scalar(b"1", Scalar::one());
 
-        let t = prover.allocate_scalar(b"t", credential.amac.t);
-
         // Commit to the values and names of the Camenisch-Stadler publics.
         let (G_V, _)       = prover.allocate_point(b"G_V",       issuer.system_parameters.G_V);
         let (G_w, _)       = prover.allocate_point(b"G_w",       issuer.system_parameters.G_w);
@@ -90,6 +88,7 @@ impl ProofOfIssuance {
         let (I, _)   = prover.allocate_point(b"I",   issuer.issuer_parameters.I);
         let (U, _)   = prover.allocate_point(b"U", credential.amac.U);
         let (V, _)   = prover.allocate_point(b"V", credential.amac.V);
+        let (tU, _)  = prover.allocate_point(b"tU", credential.amac.t * credential.amac.U);
 
         let mut M: Vec<PointVar> = Vec::with_capacity(issuer.system_parameters.NUMBER_OF_ATTRIBUTES as usize);
 
@@ -116,13 +115,12 @@ impl ProofOfIssuance {
 
         prover.constrain(I, rhs);
 
-        // Constraint #3: V = G_w * w + U * x_0 + U * x_1 + U * t + \sigma{i=1}{n} M_i * y_i
-        let mut rhs: Vec<(ScalarVar, PointVar)> = Vec::with_capacity(4 + issuer.system_parameters.NUMBER_OF_ATTRIBUTES as usize);
+        // Constraint #3: V = G_w * w + U * x_0 + U * x_1 * t + \sigma{i=1}{n} M_i * y_i
+        let mut rhs: Vec<(ScalarVar, PointVar)> = Vec::with_capacity(3 + issuer.system_parameters.NUMBER_OF_ATTRIBUTES as usize);
 
         rhs.push((w, G_w));
         rhs.push((x_0, U));
-        rhs.push((x_1, U));
-        rhs.push((t, U));
+        rhs.push((x_1, tU));
         rhs.extend(y.iter().copied().zip(M.iter().copied()));
 
         prover.constrain(V, rhs);
@@ -159,7 +157,6 @@ impl ProofOfIssuance {
         }
 
         let one = verifier.allocate_scalar(b"1");
-        let t   = verifier.allocate_scalar(b"t");
 
         // Commit to the values and names of the Camenisch-Stadler publics.
         let G_V       = verifier.allocate_point(b"G_V",       system_parameters.G_V.compress())?;
@@ -180,6 +177,7 @@ impl ProofOfIssuance {
         let I   = verifier.allocate_point(b"I",   issuer_parameters.I.compress())?;
         let U   = verifier.allocate_point(b"U", credential.amac.U.compress())?;
         let V   = verifier.allocate_point(b"V", credential.amac.V.compress())?;
+        let tU  = verifier.allocate_point(b"tU", (credential.amac.t * credential.amac.U).compress())?;
 
         let mut M: Vec<PointVar> = Vec::with_capacity(system_parameters.NUMBER_OF_ATTRIBUTES as usize);
 
@@ -206,13 +204,12 @@ impl ProofOfIssuance {
 
         verifier.constrain(I, rhs);
 
-        // Constraint #3: V = G_w * w + U * x_0 + U * x_1 + U * t + \sigma{i=1}{n} M_i * y_i
-        let mut rhs: Vec<(ScalarVar, PointVar)> = Vec::with_capacity(4 + system_parameters.NUMBER_OF_ATTRIBUTES as usize);
+        // Constraint #3: V = G_w * w + U * x_0 + U * x_1 * t + \sigma{i=1}{n} M_i * y_i
+        let mut rhs: Vec<(ScalarVar, PointVar)> = Vec::with_capacity(3 + system_parameters.NUMBER_OF_ATTRIBUTES as usize);
 
         rhs.push((w, G_w));
         rhs.push((x_0, U));
-        rhs.push((x_1, U));
-        rhs.push((t, U));
+        rhs.push((x_1, tU));
         rhs.extend(y.iter().copied().zip(M.iter().copied()));
 
         verifier.constrain(V, rhs);
