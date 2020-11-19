@@ -294,7 +294,10 @@ impl ProofOfValidCredential {
                 Attribute::SecretPoint(pt) => {
                     // The .unwrap() here can never panic because we check above that the key isn't
                     // None if we have encrypted group element attributes.
-                    proofs_of_encryption.push((i as u16, ProofOfEncryption::prove(&system_parameters, &pt, i as u16, &keypair.unwrap(), &z_)));
+                    let proof_of_encryption = ProofOfEncryption::prove(&system_parameters, &pt,
+                                                                       i as u16, &keypair.unwrap(), &z_);
+
+                    proofs_of_encryption.push((i as u16, proof_of_encryption));
                     encrypted_attributes.push(EncryptedAttribute::SecretPoint);
                 },
             }
@@ -336,12 +339,13 @@ impl ProofOfValidCredential {
         let mut Z_ = self.C_V - issuer.amacs_key.W - (self.C_x_0 * issuer.amacs_key.x_0) - (self.C_x_1 * issuer.amacs_key.x_1);
 
         for (i, attribute) in self.encrypted_attributes.iter().enumerate() {
-            match attribute {
-                EncryptedAttribute::PublicScalar(m_i) => Z_ -= issuer.amacs_key.y[i] * (self.C_y[i] + (issuer.system_parameters.G_m[i] * m_i)),
-                EncryptedAttribute::SecretScalar      => Z_ -= issuer.amacs_key.y[i] *  self.C_y[i],
-                EncryptedAttribute::PublicPoint(M_i)  => Z_ -= issuer.amacs_key.y[i] * (self.C_y[i] + M_i),
-                EncryptedAttribute::SecretPoint       => Z_ -= issuer.amacs_key.y[i] *  self.C_y[i],
-            }
+            let x = match attribute {
+                EncryptedAttribute::PublicScalar(m_i) => self.C_y[i] + (issuer.system_parameters.G_m[i] * m_i),
+                EncryptedAttribute::SecretScalar      => self.C_y[i],
+                EncryptedAttribute::PublicPoint(M_i)  => self.C_y[i] + M_i,
+                EncryptedAttribute::SecretPoint       => self.C_y[i],
+            };
+            Z_ -= x * issuer.amacs_key.y[i];
         }
 
         println!("Z recalculated is {:?}", Z_.compress());
