@@ -458,11 +458,12 @@ mod test {
         let issuer = Issuer::new(&system_parameters, &mut rng);
         let mut request = CredentialRequestConstructor::new(&system_parameters);
         let message = String::from("This is a tsunami alert test..").into_bytes();
-        // Each plaintext takes up three attributes;
-        let _plaintext = request.append_plaintext(&message);
 
+        request.append_revealed_point(RistrettoPoint::random(&mut rng));
+        request.append_revealed_point(RistrettoPoint::random(&mut rng));
         request.append_revealed_scalar(Scalar::random(&mut rng));
         request.append_revealed_scalar(Scalar::random(&mut rng));
+        request.append_revealed_point(RistrettoPoint::random(&mut rng));
         request.append_revealed_scalar(Scalar::random(&mut rng));
         request.append_revealed_point(RistrettoPoint::random(&mut rng));
         request.append_revealed_scalar(Scalar::random(&mut rng));
