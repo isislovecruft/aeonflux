@@ -235,6 +235,25 @@ mod test {
     #[test]
     fn issuance_proof() {
         let mut rng = thread_rng();
+        let system_parameters = SystemParameters::generate(&mut rng, 3).unwrap();
+        let issuer = Issuer::new(&system_parameters, &mut rng);
+        let message: Vec<u8> = vec![1u8];
+        let mut request = CredentialRequestConstructor::new(&system_parameters);
+
+        request.append_revealed_scalar(Scalar::random(&mut rng));
+        request.append_revealed_scalar(Scalar::random(&mut rng));
+        request.append_revealed_point(RistrettoPoint::random(&mut rng));
+
+        let credential_request = request.finish();
+        let issuance = issuer.issue(credential_request, &mut rng).unwrap();
+        let credential = issuance.verify(&system_parameters, &issuer.issuer_parameters);
+
+        assert!(credential.is_ok());
+    }
+
+    #[test]
+    fn issuance_proof_with_plaintext() {
+        let mut rng = thread_rng();
         let system_parameters = SystemParameters::generate(&mut rng, 7).unwrap();
         let issuer = Issuer::new(&system_parameters, &mut rng);
         let message: Vec<u8> = vec![1u8];
