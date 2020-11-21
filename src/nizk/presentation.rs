@@ -169,8 +169,10 @@ impl ProofOfValidCredential {
                 Attribute::EitherPoint(_)  =>   C_y_.push(system_parameters.G_y[i] * z_),
                 Attribute::SecretPoint(p)  =>   C_y_.push(system_parameters.G_y[i] * z_ + p.M1),
                 Attribute::PublicScalar(_) =>   C_y_.push(system_parameters.G_y[i] * z_),
-                Attribute::SecretScalar(m) => { C_y_.push(system_parameters.G_y[i] * z_ + system_parameters.G_m[i] * *m);
-                                                H_s_.push((i, system_parameters.G_m[i], *m)); },
+                Attribute::SecretScalar(m) => {
+                    C_y_.push(system_parameters.G_y[i] * z_ + system_parameters.G_m[i] * *m);
+                    H_s_.push((i, system_parameters.G_m[i], *m));
+                },
             };
         }
         let C_x_0_: RistrettoPoint = (system_parameters.G_x_0 * z_) +  credential.amac.U;
