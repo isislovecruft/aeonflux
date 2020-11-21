@@ -61,7 +61,7 @@ impl AnonymousCredential {
 
         match attribute {
             Attribute::SecretScalar(x) => self.attributes[index] = Attribute::PublicScalar(*x),
-            Attribute::SecretPoint(x)  => self.attributes[index] = Attribute::PublicPoint(x.M1),
+            Attribute::SecretPoint(x)  => self.attributes[index] = Attribute::EitherPoint(x.clone()),
             _ => return Ok(()),
         }
 
