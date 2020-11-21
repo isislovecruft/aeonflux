@@ -41,14 +41,14 @@ use crate::parameters::SystemParameters;
 use crate::symmetric::Plaintext;
 
 /// Determine the size of a [`SecretKey`], in bytes.
-pub(crate) fn sizeof_secret_key(number_of_attributes: u8) -> usize {
-    32 * (6 + number_of_attributes) as usize
+pub(crate) fn sizeof_secret_key(number_of_attributes: u32) -> usize {
+    32 * (5 + number_of_attributes) as usize + 4
 }
 
 /// An AMAC secret key is \(( (w, w', x_0, x_1, \vec{y_{n}}, W ) \in \mathbb{Z}_q \))
 /// where \(( W := G_w * w \)). (The \(( G_w \)) is one of the orthogonal generators
 /// from the [`SystemParameters`].)
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct SecretKey {
     pub(crate) w: Scalar,
     pub(crate) w_prime: Scalar,
@@ -108,9 +108,9 @@ impl SecretKey {
 
     /// Serialise this AMAC secret key to a vector of bytes.
     pub(crate) fn to_bytes(&self) -> Vec<u8> {
-        let mut bytes: Vec<u8> = Vec::with_capacity(sizeof_secret_key(self.y.len() as u8) + 1);
+        let mut bytes: Vec<u8> = Vec::with_capacity(sizeof_secret_key(self.y.len() as u32));
 
-        bytes.push(self.y.len() as u8);
+        bytes.extend(&(self.y.len() as u32).to_le_bytes());
         bytes.extend(self.w.as_bytes());
         bytes.extend(self.w_prime.as_bytes());
         bytes.extend(self.x_0.as_bytes());
@@ -127,14 +127,17 @@ impl SecretKey {
     /// Attempt to deserialise this AMAC secret key from bytes.
     pub(crate) fn from_bytes(bytes: &[u8]) -> Result<SecretKey, MacError> {
         // We assume no one is going to create a key for less that one attributes.
-        if bytes.len() < sizeof_secret_key(1u8) + 1 {
+        if bytes.len() < sizeof_secret_key(1) {
             return Err(MacError::KeypairDeserialisation);
         }
 
         let mut index: usize = 0;
         let mut chunk: [u8; 32] = [0u8; 32];
 
-        let number_of_attributes = bytes[index]; index += 1; chunk.copy_from_slice(&bytes[index..index+32]);
+        let mut tmp = [0u8; 4];
+
+        tmp.copy_from_slice(&bytes[index..index+4]);
+        let number_of_attributes = u32::from_le_bytes(tmp); index +=  4; chunk.copy_from_slice(&bytes[index..index+32]);
         let w       = Scalar::from_canonical_bytes(chunk)?; index += 32; chunk.copy_from_slice(&bytes[index..index+32]);
         let w_prime = Scalar::from_canonical_bytes(chunk)?; index += 32; chunk.copy_from_slice(&bytes[index..index+32]);
         let x_0     = Scalar::from_canonical_bytes(chunk)?; index += 32; chunk.copy_from_slice(&bytes[index..index+32]);
@@ -322,6 +325,17 @@ mod test {
     }
 
     #[test]
+    fn secret_key_from_bytes_2_attributes() {
+        let mut rng = thread_rng();
+        let params = SystemParameters::generate(&mut rng, 2).unwrap();
+        let sk = SecretKey::generate(&mut rng, &params);
+        let bytes = sk.to_bytes();
+        let sk_prime = SecretKey::from_bytes(&bytes);
+
+        assert!(sk_prime.is_ok());
+    }
+
+    #[test]
     fn secret_key_sizeof() {
         let mut rng = thread_rng();
         let params = SystemParameters::generate(&mut rng, 2).unwrap();
@@ -330,7 +344,7 @@ mod test {
         let serialised = sk.to_bytes();
 
         // We use 4 bytes for storing the number of attributes.
-        assert!(sizeof == serialised.len() - 4, "{} != {}", sizeof, serialised.len() - 4);
+        assert!(sizeof == serialised.len(), "{} != {}", sizeof, serialised.len());
     }
 
     #[test]
