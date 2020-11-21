@@ -322,6 +322,18 @@ mod test {
     }
 
     #[test]
+    fn secret_key_sizeof() {
+        let mut rng = thread_rng();
+        let params = SystemParameters::generate(&mut rng, 2).unwrap();
+        let sk = SecretKey::generate(&mut rng, &params);
+        let sizeof = sizeof_secret_key(2);
+        let serialised = sk.to_bytes();
+
+        // We use 4 bytes for storing the number of attributes.
+        assert!(sizeof == serialised.len() - 4, "{} != {}", sizeof, serialised.len() - 4);
+    }
+
+    #[test]
     fn amac_verification() {
         let mut rng = thread_rng();
         let params = SystemParameters::generate(&mut rng, 8).unwrap();
