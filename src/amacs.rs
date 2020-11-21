@@ -351,7 +351,22 @@ mod test {
     }
 
     #[test]
-    fn amac_verification() {
+    fn amac_verification_with_plaintext_attribute() {
+        let mut rng = thread_rng();
+        let params = SystemParameters::generate(&mut rng, 2).unwrap();
+        let sk = SecretKey::generate(&mut rng, &params);
+        let mut attributes = Vec::new();
+
+        attributes.push(Attribute::SecretScalar(Scalar::random(&mut rng)));
+        attributes.push(Attribute::PublicScalar(Scalar::random(&mut rng)));
+
+        let amac = Amac::tag(&mut rng, &params, &sk, &attributes).unwrap();
+
+        assert!(amac.verify(&params, &sk, &attributes).is_ok());
+    }
+
+    #[test]
+    fn amac_verification_with_plaintext_attributes() {
         let mut rng = thread_rng();
         let params = SystemParameters::generate(&mut rng, 8).unwrap();
         let sk = SecretKey::generate(&mut rng, &params);
@@ -365,7 +380,7 @@ mod test {
         messages.push(Attribute::SecretPoint(P1));
         messages.push(Attribute::PublicScalar(Scalar::random(&mut rng)));
         messages.push(Attribute::SecretPoint(P2));
-        messages.push(Attribute::SecretPoint(P3));
+        messages.push(Attribute::EitherPoint(P3));
         messages.push(Attribute::SecretScalar(Scalar::random(&mut rng)));
         messages.push(Attribute::PublicPoint(RistrettoPoint::random(&mut rng)));
         messages.push(Attribute::PublicScalar(Scalar::random(&mut rng)));
