@@ -276,18 +276,18 @@ impl Amac {
         csprng: &mut R,
         system_parameters: &SystemParameters,
         secret_key: &SecretKey,
-        messages: &Vec<Attribute>,
+        attributes: &Vec<Attribute>,
     ) -> Result<Amac, MacError>
     where
         R: RngCore + CryptoRng,
     {
-        if messages.len() > system_parameters.NUMBER_OF_ATTRIBUTES as usize {
+        if attributes.len() != system_parameters.NUMBER_OF_ATTRIBUTES as usize {
             return Err(MacError::MessageLengthError{length: system_parameters.NUMBER_OF_ATTRIBUTES as usize});
         }
 
         let t: Scalar = Scalar::random(csprng);
         let U: RistrettoPoint = RistrettoPoint::random(csprng);
-        let V: RistrettoPoint = Amac::compute_V(system_parameters, secret_key, messages, &t, &U);
+        let V: RistrettoPoint = Amac::compute_V(system_parameters, secret_key, attributes, &t, &U);
 
         Ok(Amac { t, U, V })
     }
@@ -298,9 +298,13 @@ impl Amac {
         &self,
         system_parameters: &SystemParameters,
         secret_key: &SecretKey,
-        messages: &Vec<Attribute>,
+        attributes: &Vec<Attribute>,
     ) -> Result<(), MacError> {
-        let V_prime = Amac::compute_V(system_parameters, secret_key, messages, &self.t, &self.U);
+        if attributes.len() != system_parameters.NUMBER_OF_ATTRIBUTES as usize {
+            return Err(MacError::MessageLengthError{length: system_parameters.NUMBER_OF_ATTRIBUTES as usize});
+        }
+
+        let V_prime = Amac::compute_V(system_parameters, secret_key, attributes, &self.t, &self.U);
 
         if self.V == V_prime {
             return Ok(());
