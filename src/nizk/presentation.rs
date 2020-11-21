@@ -495,7 +495,27 @@ mod test {
         let issuance = issuer.issue(credential_request, &mut rng).unwrap();
         let credential = issuance.verify(&system_parameters, &issuer.issuer_parameters).unwrap();
         let (keypair, _) = SymmetricKeypair::generate(&system_parameters, &mut rng);
-        let proof = ProofOfValidCredential::prove(&system_parameters, &issuer.issuer_parameters, &credential, Some(&keypair), &mut rng);
+        let proof = credential.show(&system_parameters, &issuer.issuer_parameters, Some(&keypair), &mut rng);
+
+        assert!(proof.is_ok());
+    }
+
+    #[test]
+    fn credential_proof_1_plaintext_hidden() {
+        let mut rng = thread_rng();
+        let system_parameters = SystemParameters::generate(&mut rng, 3).unwrap();
+        let issuer = Issuer::new(&system_parameters, &mut rng);
+        let mut request = CredentialRequestConstructor::new(&system_parameters);
+        let message = String::from("This is a tsunami alert test..").into_bytes();
+        let _plaintext = request.append_plaintext(&message);
+        let credential_request = request.finish();
+        let issuance = issuer.issue(credential_request, &mut rng).unwrap();
+        let mut credential = issuance.verify(&system_parameters, &issuer.issuer_parameters).unwrap();
+
+        credential.hide_attribute(1).unwrap();
+
+        let (keypair, _) = SymmetricKeypair::generate(&system_parameters, &mut rng);
+        let proof = credential.show(&system_parameters, &issuer.issuer_parameters, Some(&keypair), &mut rng);
 
         assert!(proof.is_ok());
 
