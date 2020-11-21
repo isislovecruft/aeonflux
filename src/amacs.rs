@@ -199,7 +199,6 @@ impl Drop for Attribute {
     }
 }
 
-
 /// These are the form of the attributes during credential presentation, when
 /// some may be be hidden either by commiting to them and proving them in
 /// zero-knowledge (as is the case for hidden scalar attributes) or by
