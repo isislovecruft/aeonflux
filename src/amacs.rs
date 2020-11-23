@@ -164,7 +164,7 @@ impl_serde_with_to_bytes_and_from_bytes!(SecretKey, "A valid byte sequence repre
 /// When a `Credential` is shown, its attributes may be either revealed or
 /// hidden from the credential issuer.  These represent all the valid attribute
 /// types.
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum Attribute {
     /// A scalar attribute which is revealed upon credential presentation.
     PublicScalar(Scalar),
@@ -204,7 +204,7 @@ impl Drop for Attribute {
 /// zero-knowledge (as is the case for hidden scalar attributes) or by
 /// encrypting them and proving the ciphertext's validity in zero-knowledge (as
 /// is the case for the hidden group element attributes).
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum EncryptedAttribute {
     /// A scalar attribute which is revealed upon credential presentation.
     PublicScalar(Scalar),
@@ -218,6 +218,7 @@ pub enum EncryptedAttribute {
 
 /// Messages are computed from `Attribute`s by scalar multiplying the scalar
 /// portions by their respective generator in `SystemParameters.G_m`.
+#[derive(Debug)]
 pub(crate) struct Messages(pub(crate) Vec<RistrettoPoint>);
 
 impl Messages {
@@ -243,6 +244,7 @@ impl Messages {
 }
 
 /// An algebraic message authentication code, \(( (t,U,V) \in \mathbb{Z}_q \times \mathbb{G} \times \mathbb{G} \)).
+#[derive(Clone, Debug)]
 pub(crate) struct Amac {
     pub(crate) t: Scalar,
     pub(crate) U: RistrettoPoint,

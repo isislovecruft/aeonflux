@@ -26,6 +26,7 @@ use crate::nizk::presentation::ProofOfValidCredential;
 use crate::symmetric::Keypair as SymmetricKeypair;
 
 /// An anonymous credential.
+#[derive(Clone, Debug)]
 pub struct AnonymousCredential {
     pub(crate) amac: Amac,
     pub(crate) attributes: Vec<Attribute>,
