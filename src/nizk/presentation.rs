@@ -578,6 +578,38 @@ mod test {
     }
 
     #[test]
+    fn credential_proof_scalar_and_group_element_switch() {
+        let mut rng = thread_rng();
+        let system_parameters = SystemParameters::generate(&mut rng, 2).unwrap();
+        let issuer = Issuer::new(&system_parameters, &mut rng);
+        let mut request1 = CredentialRequestConstructor::new(&system_parameters);
+
+        request1.append_revealed_scalar(Scalar::random(&mut rng));
+        request1.append_revealed_point(RistrettoPoint::random(&mut rng));
+
+        let credential_request1 = request1.finish();
+        let issuance1 = issuer.issue(credential_request1, &mut rng).unwrap();
+        let credential1 = issuance1.verify(&system_parameters, &issuer.issuer_parameters).unwrap();
+        let presentation1 = credential1.show(&system_parameters, &issuer.issuer_parameters, None, &mut rng).unwrap();
+        let verification1 = issuer.verify(&presentation1);
+
+        assert!(verification1.is_ok());
+
+        let mut request2 = CredentialRequestConstructor::new(&system_parameters);
+
+        request2.append_revealed_point(RistrettoPoint::random(&mut rng));
+        request2.append_revealed_scalar(Scalar::random(&mut rng));
+
+        let credential_request2 = request2.finish();
+        let issuance2 = issuer.issue(credential_request2, &mut rng).unwrap();
+        let credential2 = issuance2.verify(&system_parameters, &issuer.issuer_parameters).unwrap();
+        let presentation2 = credential2.show(&system_parameters, &issuer.issuer_parameters, None, &mut rng).unwrap();
+        let verification2 = issuer.verify(&presentation2);
+
+        assert!(verification2.is_ok());
+    }
+
+    #[test]
     #[should_panic(expected = "assertion failed: verification.is_ok()")]
     fn bad_credential_proof_1_scalar_revealed() {
         let mut rng = thread_rng();
