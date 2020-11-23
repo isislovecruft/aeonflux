@@ -237,7 +237,6 @@ mod test {
         let mut rng = thread_rng();
         let system_parameters = SystemParameters::generate(&mut rng, 3).unwrap();
         let issuer = Issuer::new(&system_parameters, &mut rng);
-        let message: Vec<u8> = vec![1u8];
         let mut request = CredentialRequestConstructor::new(&system_parameters);
 
         request.append_revealed_scalar(Scalar::random(&mut rng));
