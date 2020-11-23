@@ -67,14 +67,10 @@ impl CredentialRequestConstructor {
     /// [`SystemParameters`] for an instance of this protocol.
     // XXX check if we're overflowing the allotted attributes and return Result
     pub fn append_plaintext(&mut self, message: &Vec<u8>) -> Vec<symmetric::Plaintext> {
-        println!("message length is {}", message.len());
-
         let plaintexts = Plaintext::from_slice(&message[..]);
 
         for plaintext in plaintexts.iter() {
-            self.append_revealed_point(plaintext.M1);
-            self.append_revealed_point(plaintext.M2);
-            self.append_revealed_scalar(plaintext.m3);
+            self.attributes.push(Attribute::EitherPoint(plaintext.clone()));
         }
 
         plaintexts

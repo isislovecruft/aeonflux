@@ -483,9 +483,45 @@ mod test {
     }
 
     #[test]
+    fn credential_proof_10_attributes_with_plaintext() {
+        let mut rng = thread_rng();
+        let system_parameters = SystemParameters::generate(&mut rng, 10).unwrap();
+        let issuer = Issuer::new(&system_parameters, &mut rng);
+        let mut request = CredentialRequestConstructor::new(&system_parameters);
+        let message = String::from("This is a tsunami alert test..").into_bytes();
+        let _plaintext = request.append_plaintext(&message);
+
+        request.append_revealed_point(RistrettoPoint::random(&mut rng));
+        request.append_revealed_scalar(Scalar::random(&mut rng));
+        request.append_revealed_scalar(Scalar::random(&mut rng));
+        request.append_revealed_point(RistrettoPoint::random(&mut rng));
+        request.append_revealed_scalar(Scalar::random(&mut rng));
+        request.append_revealed_point(RistrettoPoint::random(&mut rng));
+        request.append_revealed_scalar(Scalar::random(&mut rng));
+        request.append_revealed_scalar(Scalar::random(&mut rng));
+        request.append_revealed_point(RistrettoPoint::random(&mut rng));
+
+        let credential_request = request.finish();
+        let issuance = issuer.issue(credential_request, &mut rng).unwrap();
+        let mut credential = issuance.verify(&system_parameters, &issuer.issuer_parameters).unwrap();
+
+        //credential.hide_attribute(0).unwrap();
+        credential.hide_attribute(2).unwrap();
+
+        let (keypair, _) = SymmetricKeypair::generate(&system_parameters, &mut rng);
+        let proof = credential.show(&system_parameters, &issuer.issuer_parameters, Some(&keypair), &mut rng);
+
+        assert!(proof.is_ok());
+
+        let verification = proof.unwrap().verify(&issuer);
+
+        assert!(verification.is_ok());
+    }
+
+    #[test]
     fn credential_proof_1_plaintext() {
         let mut rng = thread_rng();
-        let system_parameters = SystemParameters::generate(&mut rng, 3).unwrap();
+        let system_parameters = SystemParameters::generate(&mut rng, 1).unwrap();
         let issuer = Issuer::new(&system_parameters, &mut rng);
         let mut request = CredentialRequestConstructor::new(&system_parameters);
         let message = String::from("This is a tsunami alert test..").into_bytes();
@@ -502,7 +538,7 @@ mod test {
     #[test]
     fn credential_proof_1_plaintext_hidden() {
         let mut rng = thread_rng();
-        let system_parameters = SystemParameters::generate(&mut rng, 3).unwrap();
+        let system_parameters = SystemParameters::generate(&mut rng, 1).unwrap();
         let issuer = Issuer::new(&system_parameters, &mut rng);
         let mut request = CredentialRequestConstructor::new(&system_parameters);
         let message = String::from("This is a tsunami alert test..").into_bytes();
@@ -511,7 +547,7 @@ mod test {
         let issuance = issuer.issue(credential_request, &mut rng).unwrap();
         let mut credential = issuance.verify(&system_parameters, &issuer.issuer_parameters).unwrap();
 
-        credential.hide_attribute(1).unwrap();
+        credential.hide_attribute(0).unwrap();
 
         let (keypair, _) = SymmetricKeypair::generate(&system_parameters, &mut rng);
         let proof = credential.show(&system_parameters, &issuer.issuer_parameters, Some(&keypair), &mut rng);

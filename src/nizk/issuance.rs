@@ -253,7 +253,7 @@ mod test {
     #[test]
     fn issuance_proof_with_plaintext() {
         let mut rng = thread_rng();
-        let system_parameters = SystemParameters::generate(&mut rng, 7).unwrap();
+        let system_parameters = SystemParameters::generate(&mut rng, 5).unwrap();
         let issuer = Issuer::new(&system_parameters, &mut rng);
         let message: Vec<u8> = vec![1u8];
         let mut request = CredentialRequestConstructor::new(&system_parameters);
@@ -276,7 +276,7 @@ mod test {
     #[should_panic(expected = "assertion failed: credential.is_ok()")]
     fn issuance_proof_identity_plaintext() {
         let mut rng = thread_rng();
-        let system_parameters = SystemParameters::generate(&mut rng, 8).unwrap();
+        let system_parameters = SystemParameters::generate(&mut rng, 6).unwrap();
         let issuer = Issuer::new(&system_parameters, &mut rng);
         let message: Vec<u8> = vec![0u8; 30];
         let mut request = CredentialRequestConstructor::new(&system_parameters);
