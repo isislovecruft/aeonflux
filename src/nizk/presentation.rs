@@ -457,7 +457,6 @@ mod test {
         let system_parameters = SystemParameters::generate(&mut rng, 10).unwrap();
         let issuer = Issuer::new(&system_parameters, &mut rng);
         let mut request = CredentialRequestConstructor::new(&system_parameters);
-        let message = String::from("This is a tsunami alert test..").into_bytes();
 
         request.append_revealed_point(RistrettoPoint::random(&mut rng));
         request.append_revealed_point(RistrettoPoint::random(&mut rng));
