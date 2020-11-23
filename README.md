@@ -46,7 +46,6 @@ extern crate aeonflux;
 extern crate curve25519_dalek;
 extern crate rand;
 
-use aeonflux::amacs::Attribute;
 use aeonflux::issuer::Issuer;
 use aeonflux::parameters::IssuerParameters;
 use aeonflux::parameters::SystemParameters;
@@ -60,12 +59,10 @@ use curve25519_dalek::scalar::Scalar;
 use rand::thread_rng;
 
 // First we set up an anonymous credential issuer.  We have to specify
-// the number of attributes the credentials will have (here, 6),
-// but not their type.  Note that their type, while not specified, must
-// be fixed, e.g. a 2-attribute credential could have a scalar and then
-// a point attributes, but *not* a point and then a scalar.
+// the number of attributes the credentials will have (here, 4),
+// but not their type.
 let mut rng = thread_rng();
-let system_parameters = SystemParameters::generate(&mut rng, 6).unwrap();
+let system_parameters = SystemParameters::generate(&mut rng, 4).unwrap();
 let issuer = Issuer::new(&system_parameters, &mut rng);
 
 // The issuer then publishes the `system_parameters` and the
@@ -76,18 +73,17 @@ let issuer_parameters = issuer.issuer_parameters.clone();
 // attributes and sends it to the issuer.
 let mut request = CredentialRequestConstructor::new(&system_parameters);
 
-// Every 30 bytes of plaintext uses two point attributes and a scalar
-// attribute.  This plaintext message is exactly 30 bytes, so it accounts
-// for three attributes total on the credential.  If it were one byte
-// longer, it would account for six attributes.
+// Revealed scalars and revealed points count for one attribute each.
+request.append_revealed_scalar(Scalar::random(&mut rng));
+request.append_revealed_scalar(Scalar::random(&mut rng));
+request.append_revealed_point(RistrettoPoint::random(&mut rng));
+
+// Every 30 bytes of message uses one plaintext attribute. This plaintext
+// message is exactly 30 bytes, so it accounts for one attribute total on the
+// credential.  If it were one byte longer, it would account for two attributes.
 let plaintexts = request.append_plaintext(&String::from("This is a tsunami alert test..").into_bytes());
 
-// Revealed scalars and revealed points count for one attribute each.
-request.append_revealed_scalar(Scalar::random(&mut rng));         // 4th attribute
-request.append_revealed_scalar(Scalar::random(&mut rng));         // 5th attribute
-request.append_revealed_point(RistrettoPoint::random(&mut rng));  // 6th attribute
-
-// Hence we have 6 total attributes, as specified in the generation of the
+// Hence we have 4 total attributes, as specified in the generation of the
 // `system_parameters` above.
 let credential_request = request.finish();
 
@@ -105,9 +101,11 @@ let mut credential = issuance.verify(&system_parameters, &issuer_parameters).unw
 // keys can be rotated to rerandomise the encrypted attributes.
 let (keypair, master_secret) = SymmetricKeypair::generate(&system_parameters, &mut rng);
 
-// For this presentation, we're going to mark the 5th attribute, a scalar, as being
-// hidden.
-credential.hide_attribute(5);
+// For this presentation, we're going to encrypt the plaintext (the fourth attribute)
+// and also mark the first attribute, a scalar, as being hidden. Remember that
+// indexing starts at 0.
+credential.hide_attribute(0);
+credential.hide_attribute(3);
 
 // The user now creates a presentation of the credential to give to the issuer.
 let presentation = credential.show(&system_parameters, &issuer_parameters, Some(&keypair), &mut rng).unwrap();
