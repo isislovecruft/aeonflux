@@ -115,3 +115,8 @@ let verification = issuer.verify(&presentation);
 
 assert!(verification.is_ok());
 ```
+
+# TODO
+
+* [] Add DLEQ proofs between the C_y commitments to hidden group attributes and
+  the corresponding proofs of encryption.
