@@ -31,12 +31,12 @@ use crate::errors::CredentialError;
 
 /// Given the `number_of_attributes`, calculate the size of a serialised
 /// [`SystemParameters`], in bytes.
-pub(crate) fn sizeof_system_parameters(number_of_attributes: u8) -> usize {
+pub(crate) fn sizeof_system_parameters(number_of_attributes: u32) -> usize {
     // G_y is always at least three elements
     if number_of_attributes < 3 {
-        return 32 * (5 + 3 + number_of_attributes as usize + 4) + 1
+        return 32 * (5 + 3 + number_of_attributes as usize + 4) + 4
     }
-    32 * (5 + (2 * number_of_attributes as usize) + 4) + 1
+    32 * (5 + (2 * number_of_attributes as usize) + 4) + 4
 }
 
 /// The `SystemParameters` define the system-wide context in which the anonymous
@@ -60,18 +60,19 @@ pub(crate) fn sizeof_system_parameters(number_of_attributes: u8) -> usize {
 /// \\( (G_a, G_a0, G_a1) \in \mathbb{G} \\), chosen as detailed above.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct SystemParameters {
-    pub NUMBER_OF_ATTRIBUTES: u8,
-    pub G:         RistrettoPoint,
-    pub G_w:       RistrettoPoint,
-    pub G_w_prime: RistrettoPoint,
-    pub G_x_0:     RistrettoPoint,
-    pub G_x_1:     RistrettoPoint,
-    pub G_y:       Vec<RistrettoPoint>,
-    pub G_m:       Vec<RistrettoPoint>,
-    pub G_V:       RistrettoPoint,
-    pub G_a:       RistrettoPoint,
-    pub G_a0:      RistrettoPoint,
-    pub G_a1:      RistrettoPoint,
+    /// The number of credential attributes these system parameters support.
+    pub NUMBER_OF_ATTRIBUTES: u32,
+    pub(crate) G:         RistrettoPoint,
+    pub(crate) G_w:       RistrettoPoint,
+    pub(crate) G_w_prime: RistrettoPoint,
+    pub(crate) G_x_0:     RistrettoPoint,
+    pub(crate) G_x_1:     RistrettoPoint,
+    pub(crate) G_y:       Vec<RistrettoPoint>,
+    pub(crate) G_m:       Vec<RistrettoPoint>,
+    pub(crate) G_V:       RistrettoPoint,
+    pub(crate) G_a:       RistrettoPoint,
+    pub(crate) G_a0:      RistrettoPoint,
+    pub(crate) G_a1:      RistrettoPoint,
 }
 
 macro_rules! try_deserialise {
@@ -92,7 +93,10 @@ impl SystemParameters {
         let mut index: usize = 0;
         let mut chunk = [0u8; 32];
 
-        let NUMBER_OF_ATTRIBUTES: u8 = bytes[0]; index += 1;
+        let mut tmp = [0u8; 4];
+
+        tmp.copy_from_slice(&bytes[index..index+4]); index += 4;
+        let NUMBER_OF_ATTRIBUTES: u32 = u32::from_le_bytes(tmp);
 
         if bytes.len() != sizeof_system_parameters(NUMBER_OF_ATTRIBUTES) {
             return Err(CredentialError::NoSystemParameters);
@@ -151,8 +155,7 @@ impl SystemParameters {
     pub fn to_bytes(&self) -> Vec<u8> {
         let mut v: Vec<u8> = Vec::with_capacity(sizeof_system_parameters(self.NUMBER_OF_ATTRIBUTES));
 
-        v.push(self.NUMBER_OF_ATTRIBUTES);
-
+        v.extend(&self.NUMBER_OF_ATTRIBUTES.to_le_bytes());
         v.extend(self.G.compress().to_bytes().iter());
         v.extend(self.G_w.compress().to_bytes().iter());
         v.extend(self.G_w_prime.compress().to_bytes().iter());
@@ -192,7 +195,7 @@ impl SystemParameters {
     /// `csprng` and attempt to decompress them into a basepoint.
     pub fn hash_and_pray<R>(
         csprng: &mut R,
-        number_of_attributes: u8,
+        number_of_attributes: u32,
     ) -> Result<SystemParameters, CredentialError>
     where
         R: RngCore + CryptoRng,
@@ -324,7 +327,7 @@ impl SystemParameters {
 
     /// Generate new system parameters using the
     /// [`hash_and_pray`](SystemParameters::hash_and_pray) algorithm.
-    pub fn generate<R>(csprng: &mut R, number_of_attributes: u8)
+    pub fn generate<R>(csprng: &mut R, number_of_attributes: u32)
         -> Result<SystemParameters, CredentialError> 
     where
         R: RngCore + CryptoRng,
@@ -347,12 +350,12 @@ impl IssuerParameters {
         let C_W: RistrettoPoint = (system_parameters.G_w * secret_key.w) +
                                   (system_parameters.G_w_prime * secret_key.w_prime);
 
-        let mut I: RistrettoPoint = (-system_parameters.G_V * Scalar::one()) +
-                                    (system_parameters.G_x_0 * secret_key.x_0) +
-                                    (system_parameters.G_x_1 * secret_key.x_1);
+        let mut I: RistrettoPoint = system_parameters.G_V -
+                                   (system_parameters.G_x_0 * secret_key.x_0) -
+                                   (system_parameters.G_x_1 * secret_key.x_1);
 
         for i in 0..system_parameters.NUMBER_OF_ATTRIBUTES as usize {
-            I += system_parameters.G_y[i] * secret_key.y[i];
+            I -= system_parameters.G_y[i] * secret_key.y[i];
         }
 
         IssuerParameters { C_W, I }

@@ -25,19 +25,43 @@ use serde::ser::Serializer;
 
 use crate::amacs::sizeof_secret_key;
 use crate::amacs::Amac;
-use crate::amacs::Attribute;
 use crate::amacs::SecretKey;
 use crate::credential::AnonymousCredential;
 use crate::errors::CredentialError;
+use crate::nizk::issuance::ProofOfIssuance;
+use crate::nizk::presentation::ProofOfValidCredential;
 use crate::parameters::sizeof_system_parameters;
 use crate::parameters::IssuerParameters;
 use crate::parameters::SystemParameters;
+use crate::user::CredentialRequest;
+
+/// An issued anonymous credential.
+///
+/// The `User` who receives such a proof must check the included zero-knowledge
+/// proof that the contained credential was issued correctly.
+pub struct CredentialIssuance {
+    pub(crate) proof: ProofOfIssuance,
+    pub(crate) credential: AnonymousCredential,
+}
+
+impl CredentialIssuance {
+    pub fn verify(
+        self,
+        system_parameters: &SystemParameters,
+        issuer_parameters: &IssuerParameters,
+    ) -> Result<AnonymousCredential, CredentialError>
+    {
+        self.proof
+            .verify(system_parameters, issuer_parameters, &self.credential)
+            .and(Ok(self.credential))
+    }
+}
 
 /// An anonymous credential issuer/verifier.
 pub struct Issuer {
     pub system_parameters: SystemParameters,
     pub issuer_parameters: IssuerParameters,
-    pub amacs_key: SecretKey,
+    pub(crate) amacs_key: SecretKey,
 }
 
 impl Issuer {
@@ -86,16 +110,40 @@ impl Issuer {
     /// [`CredentialError`].
     pub fn issue<C>(
         &self,
-        attributes: Vec<Attribute>,
+        request: CredentialRequest,
         csprng: &mut C,
-    ) -> Result<AnonymousCredential, CredentialError>
+    ) -> Result<CredentialIssuance, CredentialError>
     where
         C: CryptoRng + RngCore,
     {
-        match Amac::tag(csprng, &self.system_parameters, &self.amacs_key, &attributes) {
-            Ok(amac) => Ok(AnonymousCredential { amac, attributes }),
-            Err(x) => Err(x.into()),
-        }
+        let amac = Amac::tag(csprng, &self.system_parameters, &self.amacs_key, &request.attributes)?;
+        let cred = AnonymousCredential { amac, attributes: request.attributes };
+        let proof = ProofOfIssuance::prove(&self, &cred);
+
+        Ok(CredentialIssuance { proof: proof, credential: cred })
+    }
+
+    /// Verify a user's presentation of an anonymous credential.
+    ///
+    /// The user's presentation may reveal or hide any of the attributes, so
+    /// long as the overall structure remains the same (e.g. a user cannot
+    /// reorder a credential with attributes being a scalar then a group element
+    /// to be instead a group element and then a scalar, nor can they add or
+    /// remove attributes).
+    ///
+    /// # Inputs
+    ///
+    /// * A user's [`ProofOfValidCredential`].
+    ///
+    /// # Returns
+    ///
+    /// A `Result` whose `Ok` value is empty, otherwise a `CredentialError`.
+    pub fn verify(
+        &self,
+        presentation: &ProofOfValidCredential,
+    ) -> Result<(), CredentialError>
+    {
+        presentation.verify(&self)
     }
 }
 

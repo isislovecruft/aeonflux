@@ -26,12 +26,11 @@
 // We denote group elements with capital and scalars with lowercased names.
 #![allow(non_snake_case)]
 
-#![cfg_attr(any(not(feature = "std"), feature = "alloc"), feature(alloc))]
-
 #[cfg(feature = "std")]
 #[macro_use]
 extern crate std;
 #[cfg(any(not(feature = "std"), feature = "alloc"))]
+#[macro_use]
 extern crate alloc;
 
 extern crate curve25519_dalek;
@@ -57,4 +56,4 @@ pub mod nizk;
 pub mod parameters;
 pub mod prelude;
 pub mod symmetric;
-//pub mod user;
+pub mod user;
