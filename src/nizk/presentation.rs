@@ -14,6 +14,9 @@ use alloc::vec::Vec;
 #[cfg(all(not(feature = "alloc"), feature = "std"))]
 use std::vec::Vec;
 
+#[cfg(all(not(feature = "std"), feature = "alloc"))]
+use alloc::string::String;
+
 #[cfg(not(feature = "std"))]
 use core::ops::Index;
 #[cfg(feature = "std")]
@@ -442,6 +445,9 @@ impl ProofOfValidCredential {
 
 #[cfg(test)]
 mod test {
+    #[cfg(all(not(feature = "std"), feature = "alloc"))]
+    use alloc::string::String;
+    #[cfg(all(feature = "std", not(feature = "alloc")))]
     use std::string::String;
 
     use super::*;

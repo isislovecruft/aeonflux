@@ -212,14 +212,9 @@ impl ProofOfEncryption {
 
 #[cfg(test)]
 mod test {
-    use std::string::String;
-    use std::vec::Vec;
-
     use super::*;
 
     use crate::user::CredentialRequestConstructor;
-
-    use curve25519_dalek::traits::IsIdentity;
 
     use rand::thread_rng;
 

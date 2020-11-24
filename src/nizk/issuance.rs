@@ -220,9 +220,6 @@ impl ProofOfIssuance {
 
 #[cfg(test)]
 mod test {
-    use std::string::String;
-    use std::vec::Vec;
-
     use super::*;
 
     use crate::user::CredentialRequestConstructor;
