@@ -12,9 +12,6 @@ env:
   - TEST_COMMAND=test EXTRA_FLAGS='--no-default-features' FEATURES='std simd_backend'
   # Tests serde support and default feature selection
   #- TEST_COMMAND=test EXTRA_FLAGS='' FEATURES='serde'
-  # Tests building without std. We have to select a backend, so we select the one
-  # most likely to be useful in an embedded environment.
-  - TEST_COMMAND=build EXTRA_FLAGS='--no-default-features' FEATURES='u32_backend'
   # Tests no_std+alloc usage using the most embedded-friendly backend
   - TEST_COMMAND=test EXTRA_FLAGS='--lib --no-default-features' FEATURES='alloc u32_backend'
 
